@@ -1,6 +1,4 @@
 """ Module implementing the FileCopy task.
-
-	Author: Jacob-c
 """
 
 import errno
