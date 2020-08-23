@@ -2,16 +2,14 @@ import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
-from workflowDesigner import mainWindow
+from wolfkrow.gui import main_window
 
 
 if __name__ == '__main__':
 
 	app = QtWidgets.QApplication(sys.argv)
-	window = mainWindow.main()
+	window = main_window.main()
 	
 	app.exec_()
 
 	sys.exit(0)
-
-

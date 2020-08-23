@@ -1,0 +1,24 @@
+replacements:
+ - new_name: moved
+
+tasks:
+ - copy_source:
+    task_type: FileCopy
+    dependencies:
+    source: C:\Projects\Wolfkrow\src\wolfkrow\builder\config_file.yaml
+    destination: C:\backups
+ - rename_source:
+    task_type: FileMove
+    dependencies: 
+      - copy_source
+    source: C:\backups\config_file.yaml
+    destination: C:\backups\new_name.yaml
+
+
+workflows:
+  - test_workflow: 
+     - copy_source
+     - rename_source
+  - second: 
+     - ok
+     - cool

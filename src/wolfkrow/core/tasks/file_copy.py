@@ -7,11 +7,11 @@ import errno
 import os
 import shutil
 
-from tasks.task import Task, TaskAttribute
-from tasks.taskExceptions import TaskValidationException
+from .task import Task, TaskAttribute
+from .task_exceptions import TaskValidationException
 
-class FileMove(Task):
-	""" FileMove Task implementation
+class FileCopy(Task):
+	""" FileCopy Task implementation
 	"""
 
 	source = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
@@ -24,7 +24,7 @@ class FileMove(Task):
 				source (str): Source file for FileCopy Task
 				destination (str): Destination file for FileCopy Task
 		"""
-		super(FileMove, self).__init__(**kwargs)
+		super(FileCopy, self).__init__(**kwargs)
 
 	def validate(self):
 		""" Preforms Validation checks for FileCopy Task. Will ensure the source and destination files have been specified, and that the source
@@ -67,5 +67,5 @@ class FileMove(Task):
 		""" Performs file copy.
 		"""
 
-		shutil.move(self.source, self.destination)
+		shutil.copy2(self.source, self.destination)
 		return True

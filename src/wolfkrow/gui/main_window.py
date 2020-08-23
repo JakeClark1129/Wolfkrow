@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt, QPoint
 from workflowDesigner.taskSelectorWidget import TaskSelector
 from workflowDesigner.taskWidget import TaskWidget
 from workflowDesigner.utils.connectorLine import ConnectorLine
-from tasks import tasksList
+from tasks import all_tasks
 
 
 
@@ -96,10 +96,10 @@ class main(QtWidgets.QMainWindow):
 			print ("taskName: %s" % taskName)
 			
 			taskClass = None
-			for task in tasksList:
-				print("TaskClass: %s" % task)
-				if taskName == task.__name__:
-					taskClass = task
+			for task_name in all_tasks:
+				print("TaskClass: %s" % task_name)
+				if taskName == task_name:
+					taskClass = all_tasks[task_name]
 					break
 
 			#TODO: If taskClass is found, then initialize a new taskWidget.

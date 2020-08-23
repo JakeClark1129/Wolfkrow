@@ -37,7 +37,7 @@ class TaskWidget(QtWidgets.QWidget):
 		self.userInputWidgets = {}
 		totalHeightOfUserInputs = 30
 		self.Name.setText(self.taskType.__name__)
-		for name, attribute in self.taskType.taskAttributes.items():
+		for name, attribute in self.taskType.task_attributes.items():
 			if not attribute.configurable:
 				continue
 				

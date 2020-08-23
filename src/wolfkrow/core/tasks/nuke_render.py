@@ -1,4 +1,4 @@
-""" Module implementing the FileCopy task.
+""" Module implementing a nuke render task.
 
 	Author: Jacob-c
 """
@@ -7,15 +7,24 @@ import errno
 import os
 import shutil
 
-from tasks.task import Task, TaskAttribute
-from tasks.taskExceptions import TaskValidationException
+from .task import Task, TaskAttribute
+from .task_exceptions import TaskValidationException
 
-class FileCopy(Task):
-	""" FileCopy Task implementation
+class NukeRender(Task):
+	""" NukeRender Task implementation. Will accept an nuke script, assumed to 
+		have 1 read node, and 1 write node, then substitute the attributes on each.
 	"""
 
+	nuke_script = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
+	
+	# Attributes for read node
 	source = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
+	
+	#attributes for write node
 	destination = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
+	file_type = TaskAttribute(defaultValue="exr", configurable=True, attributeType=str)
+	bit_depth = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
+
 
 	def __init__(self, **kwargs):
 		""" Initialize the FileCopy Object
@@ -39,9 +48,6 @@ class FileCopy(Task):
 
 		if self.destination == "" or self.destination is None:
 			raise TaskValidationException("FileCopy task has no destination")
-
-		if not os.path.exists(self.source):
-			raise TaskValidationException("FileCopy task source file does not exist")
 
 	def setup(self):
 		""" Will create destination directory if it does not already exist.
