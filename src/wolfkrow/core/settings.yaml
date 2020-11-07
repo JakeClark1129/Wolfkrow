@@ -1,0 +1,3 @@
+deadline:
+  host_name: DEADLINE_SERVER
+  port: 8080

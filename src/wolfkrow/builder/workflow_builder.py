@@ -1,12 +1,6 @@
 
 file_path = r"C:\Projects\Wolfkrow\src\wolfkrow\builder\config_file.yaml"
 
-
-import ptvsd
-ptvsd.enable_attach()
-print ("Waiting for attach...")
-ptvsd.wait_for_attach() 
-
 import yaml
 import wolfkrow.core.tasks as tasks
 from wolfkrow.core.engine.task_graph import TaskGraph
@@ -67,9 +61,6 @@ class Loader(object):
 		task_graph.execute_local()
 
 
-
-
-
 if __name__ == "__main__":
 	loader = Loader(r"C:\Projects\Wolfkrow\src\wolfkrow\builder\config_file.yaml")
-	loader.parse_workflow("test_workflow")
+	loader.parse_workflow("Convert to Tiff")

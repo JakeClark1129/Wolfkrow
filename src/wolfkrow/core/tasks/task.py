@@ -2,24 +2,34 @@ import collections
 import datetime
 import logging
 import os
+import six
 import traceback
 
 from weakref import WeakKeyDictionary
 
 from .task_exceptions import TaskException
 
+
+
 class TaskAttribute(object):
 	""" A Descriptor Class intended for use with Task Objects. Using these descriptor objects allows us to store metadata about each attribute 
 		on a Task, such as what the type should be, and whether or not it should show up as a configurable attribute on the workflow designer.
 	"""
 
-	def __init__(self, defaultValue=None, configurable=False, attributeType=None, serialize=True):
+	def __init__(self, default_value=None, configurable=False, attribute_type=None, 
+		attribute_options=None, serialize=True, description=None):
 		""" Initialize the TaskAttribute object.
 		
 			Kwargs:
-				defaultValue: The default value of the attribute
+				default_value (any): The default value of the attribute
 				configurable (bool): Whether or not this attribute should show up 
 					as a configurable attribute in the workflow designer.
+				attribute_type (Type): Expected type of the value received.
+				attribute_options (list): List of accepted values for the attribute.
+				serialize (bool): Whether or not this attribute gets included in 
+					the __repr__ output, and therefore included in the exported 
+					task. (See Task.export())
+				description (str): Description of this attribute. (Used in the tool tip in the workflow designer.)
 		"""
 
 		# Must be a WeakKeyDictionary to allow garbage collection to clean up our 
@@ -35,18 +45,19 @@ class TaskAttribute(object):
 		# (Meaning don't iterate through this dictionary!)
 		self.data = WeakKeyDictionary()
 
-		self.defaultValue = defaultValue
+		self.default_value = default_value
 		self.configurable = configurable
+		self.attribute_type = attribute_type
 		self.serialize = serialize
-		self.attributeType = attributeType
+		self.description = description
 
 	def __get__(self, instance, instance_type=None):
 		""" Getter function. Will return the stored value for the specified instance
-			if it exists, otherwise it will return the defaultValue
+			if it exists, otherwise it will return the default_value
 		"""
 
 		if instance is not None:
-			return self.data.get(instance, self.defaultValue)
+			return self.data.get(instance, self.default_value)
 		else:
 			# If we get this attribute from the class level, then we return the 
 			# descriptor object instead of an object level value, This allows us 
@@ -62,15 +73,15 @@ class TaskAttribute(object):
 				the type that this TaskAttribute instance is expecting
 		"""
 
-		if self.attributeType is not None and value is not None and not isinstance(value, self.attributeType):
-			raise TypeError("Invalid type %r received. Expected %s" % (type(value), self.attributeType))
+		if self.attribute_type is not None and value is not None and not isinstance(value, self.attribute_type):
+			raise TypeError("Invalid type %r received. Expected %s" % (type(value), self.attribute_type))
 
 		self.data[instance] = value
 
 class TaskType(type):
 
 	def __new__(meta, name, bases, dct):
-		classObj = super().__new__(meta, name, bases, dct)
+		classObj = super(TaskType, meta).__new__(meta, name, bases, dct)
 		
 		# Store all the TaskAttribute descriptors in an ordered dictionary so that 
 		# we can access them later in the workflow designer. They need to be kept 
@@ -83,13 +94,14 @@ class TaskType(type):
 					classObj.task_attributes[name] = attr
 
 		# Register all tasks to the wolfkrow.core.tasks module.
-		from wolfkrow.core import tasks
+		from wolfkrow.core.tasks import all_tasks
 		if classObj.__name__ != "Task":
-			tasks.all_tasks[classObj.__name__] = classObj
+			all_tasks[classObj.__name__] = classObj
 
 		return classObj
 
-class Task(metaclass=TaskType):
+@six.add_metaclass(TaskType)
+class Task():
 	""" Base Object used for every task. The TaskGraph will be used to build graph 
 		of tasks from configuration, which will later be executed as a series of 
 		tasks to complete a job.
@@ -101,11 +113,12 @@ class Task(metaclass=TaskType):
 			run(self) - This method should do the bulk of the work
 	"""
 
-	name = TaskAttribute(defaultValue=None, configurable=True, attributeType=str)
-	dependencies = TaskAttribute(defaultValue=[], configurable=False, attributeType=list, serialize=False)
-	replacements = TaskAttribute(defaultValue={}, configurable=False, attributeType=dict)
+	name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
+	dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
+	replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
 
-	executable = TaskAttribute(defaultValue=None, configurable=True, attributeType=str, serialize=False)
+	temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
+	executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
 
 	def __init__(self, **kwargs):
 		""" Initializes Task object

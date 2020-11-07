@@ -13,7 +13,7 @@ from tasks import all_tasks
 
 class main(QtWidgets.QMainWindow):
 	def __init__(self):
-		super().__init__()
+		super(main, self).__init__()
 		uic.loadUi('python/workflowDesigner/UI/mainWindow.ui', self)
 		self.show()
 
@@ -68,7 +68,7 @@ class main(QtWidgets.QMainWindow):
 					self.draggingLineObj.__setattr__(self.clickedSide, event.pos())
 					self.repaint()
 
-		super().mouseMoveEvent(event)
+		super(main, self).mouseMoveEvent(event)
 	
 	def mouseReleaseEvent(self, event):
 		self.clickedSide = None

@@ -5,15 +5,15 @@ import errno
 import os
 import shutil
 
-from .task import Task, TaskAttribute
-from .task_exceptions import TaskValidationException
+from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
 class FileMove(Task):
 	""" FileMove Task implementation
 	"""
 
-	source = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
-	destination = TaskAttribute(defaultValue="", configurable=True, attributeType=str)
+	source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
+	destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
 
 	def __init__(self, **kwargs):
 		""" Initialize the FileCopy Object

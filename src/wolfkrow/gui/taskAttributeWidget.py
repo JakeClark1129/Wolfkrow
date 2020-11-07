@@ -6,7 +6,7 @@ import inspect
 class TaskAttributeWidget(QtWidgets.QWidget):
 
 	def __init__(self, name, taskAttribute, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+		super(TaskAttributeWidget, self).__init__(*args, **kwargs)
 		uic.loadUi('python/workflowDesigner/UI/taskAttributeWidget.ui', self)
 		self.name = name
 		self.taskAttribute = taskAttribute
@@ -16,8 +16,8 @@ class TaskAttributeWidget(QtWidgets.QWidget):
 	def setupUI(self):
 		
 		self.attributeNameLbl.setText(self.name)
-		if self.taskAttribute.attributeType == str:
+		if self.taskAttribute.attribute_type == str:
 			pass
-		elif self.taskAttribute.attributeType == list:
+		elif self.taskAttribute.attribute_type == list:
 			extraLineEdit = QtWidgets.QLineEdit(self)
 			self.gridLayout.addWidget(extraLineEdit, 1, 1)

@@ -5,7 +5,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets, uic
 class TaskSelectorItem(QtWidgets.QWidget):
 
 	def __init__(self, name, taskType, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+		super(TaskSelectorItem, self).__init__(*args, **kwargs)
 		uic.loadUi('python/workflowDesigner/UI/taskSelectorItemWidget.ui', self)
 
 		self.name = name
@@ -34,4 +34,4 @@ class TaskSelectorItem(QtWidgets.QWidget):
 
 
 	def mousePressEvent(self, e):
-		super().mousePressEvent(e)
+		super(TaskSelectorItem, self).mousePressEvent(e)

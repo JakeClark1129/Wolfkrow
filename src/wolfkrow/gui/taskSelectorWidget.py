@@ -6,7 +6,7 @@ from workflowDesigner.taskSelectorItemWidget import TaskSelectorItem
 class TaskSelector(QtWidgets.QWidget):
 
 	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+		super(TaskSelector, self).__init__(*args, **kwargs)
 		uic.loadUi('python/workflowDesigner/UI/taskSelector.ui', self)
 		self.taskObj = TaskSelectorItem
 		self.tasks = []

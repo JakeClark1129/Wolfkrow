@@ -8,6 +8,8 @@ import networkx
 import subprocess
 import tempfile
 
+from wolfkrow.core import utils
+
 logging.basicConfig(level=logging.WARNING)
 
 class TaskGraphException(Exception):
@@ -35,6 +37,7 @@ class TaskGraph(object):
 				replacements (dict): A dictionary of string replacements used by tasks.
 		"""
 		self._graph = networkx.DiGraph()
+		self._settings = utils.settings
 		self._tasks = {}
 		self.name = name
 		self.replacements = replacements or {}
@@ -101,10 +104,10 @@ class TaskGraph(object):
 
 		results = {}
 		taskExecutionOrder = networkx.topological_sort(self._graph)
-		for taskName in taskExecutionOrder:
-			task = exported_tasks.get(taskName)
+		for task_name in taskExecutionOrder:
+			task = exported_tasks.get(task_name)
 			if task is None:
-				logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % taskName)
+				logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % task_name)
 				continue
 
 			ready = True
@@ -118,15 +121,19 @@ class TaskGraph(object):
 				logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.name)
 				continue
 
-			command = "{executable} {script}".format(
-				executable=task['executable'], 
-				script=task['script']
+			#TODO: The python script being executed here can be a security liability 
+			# since they can be modified between being written out, and being executed 
+			# here. Either add a mechanism for ensuring they have not been modified 
+			# or prevent them from being modified.
+			process = subprocess.Popen(
+				[task["executable"], task["script"]],
+				shell=False,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE,
+				stdin=subprocess.PIPE
 			)
-
-			# shell=true is a security liability in this case since the exported 
-			# scripts can be modified before execution begin.
-			process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
 			stdout, stderr = process.communicate()
+
 			if process.returncode == 0:
 				logging.info("Task '%s' Successfully completed" % task['obj'].name)
 				results[task['obj'].name] = True
@@ -135,6 +142,50 @@ class TaskGraph(object):
 				results[task['obj'].name] = False
 
 		#TODO: Cleanup the tempdir from exported_tasks.
+
+	def execute_deadline(self):
+		#import Deadline.DeadlineConnect as Connect
+		#deadline = Connect.DeadlineCon(self._settings["deadline_server"], self._settings["deadline_port"])
+		deadline = None
+
+		def submit_task_to_deadline(task, deadline, dependencies):
+			dependencies_str = ",".join(dependencies)
+			job_attrs = {
+				"Name": task['obj'].name,
+				"Plugin": "CommandLine",
+				"Executable": task['executable'], 
+				"Args": task['script'], 
+				"JobDependencies": dependencies_str
+			}
+
+			plugin_attrs = {
+
+			}
+
+			job_id = task['obj'].name
+			#job_id = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
+			print("Job: {}".format(job_id))
+			return job_id
+
+		exported_tasks = self.export_tasks()
+
+		results = {}
+		taskExecutionOrder = networkx.topological_sort(self._graph)
+		for task_name in taskExecutionOrder:
+			task = exported_tasks.get(task_name)
+			if task is None:
+				logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % task_name)
+				continue
+
+			job_dependencies = []
+			for dependencyName in task['obj'].dependencies:
+				# If the dependency has no deadline_id, it means it was never actually added it to the task graph.
+				dependency = exported_tasks.get(dependencyName)
+				if dependency and "deadline_id" in dependency:
+					job_dependencies.append(dependency['deadline_id'])
+
+			deadline_id = submit_task_to_deadline(task, deadline, job_dependencies)
+			task['deadline_id'] = deadline_id
 
 	def execute_legacy(self):
 		""" Executes the task graph.
@@ -159,14 +210,14 @@ class TaskGraph(object):
 		
 		results = {}
 		taskExecutionOrder = networkx.topological_sort(self._graph)
-		for taskName in taskExecutionOrder:
-			task = self._tasks.get(taskName)
+		for task_name in taskExecutionOrder:
+			task = self._tasks.get(task_name)
 			# Due to how we handle dependencies it is possible that we have tasks in our task graph that never actually existed.
 			if task is None:
-				logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % taskName)
+				logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % task_name)
 				continue
 			
-			logging.info("Running task: %s" % taskName)
+			logging.info("Running task: %s" % task_name)
 
 			#Determine if this task's dependencies have successfully completed. Otherwise skip it
 			ready = True
