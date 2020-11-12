@@ -3,6 +3,7 @@
     Author: Jacob Clark
 """
 
+import copy
 import logging
 import networkx
 import subprocess
@@ -79,6 +80,12 @@ class TaskGraph(object):
 
     def export_tasks(self):
         """ Exports each individual task to its standalone state for execution.
+
+            Note: there is some weird logic here to handle tasks that expand into 
+            other tasks. We need to come up with a cleaner solution. Perhaps we can 
+            allow each task to store a copy of its own task graph only containing 
+            all its dependents, and then each task can be responsible for exporting 
+            its own dependents during execution?
         """
 
         exported_tasks = {}
@@ -86,11 +93,20 @@ class TaskGraph(object):
         tempdir = tempfile.mkdtemp()
         logging.info("TEMPDIR: " + tempdir)
 
-        for task_name, task in self._tasks.items():
+        # Create a copy of the tasks dictionary.
+        tasks = copy.copy(self._tasks)
+        for task in tasks.values():
 
             # Export scripts for task.
             exported = task.export(tempdir, self.name)
-            if not isinstance(exported, list):
+
+            # If the task export returns a list, that mean it was a task which 
+            # expanded into multiple other tasks. We need to add these new tasks 
+            # to the task_graph.
+            if isinstance(exported, list):
+                for exported_task in exported:
+                    self.add_task(exported_task[0])
+            else:
                 exported = [exported]
 
             for exported_task in exported:
