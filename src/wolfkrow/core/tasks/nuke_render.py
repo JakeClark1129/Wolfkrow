@@ -10,201 +10,201 @@ from .task_exceptions import TaskValidationException
 
 
 class NukeRender(Task):
-	""" NukeRender Task implementation. Will accept a list of nuke scripts, concatenate 
-		them together (See "TODO: concatenation" function for logic), then substitute 
-		the replacements for each.
+    """ NukeRender Task implementation. Will accept a list of nuke scripts, concatenate 
+        them together (See "TODO: concatenation" function for logic), then substitute 
+        the replacements for each.
 
-		Will create a Read node at the top of the node graph with the specified settings.
-		Will create a Write node at the bottom of the node graph with the specified settings.
-	"""
+        Will create a Read node at the top of the node graph with the specified settings.
+        Will create a Write node at the bottom of the node graph with the specified settings.
+    """
 
-	scripts = TaskAttribute(default_value="", configurable=True, attribute_type=list, 
-		description="list of nuke scripts to concatenate together. Python scripts will be executed.")
+    scripts = TaskAttribute(default_value="", configurable=True, attribute_type=list, 
+        description="list of nuke scripts to concatenate together. Python scripts will be executed.")
 
-	# Attributes for read node
-	source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
-	
-	# Attributes for write node
-	write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
-	destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
-	file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
-	bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
+    # Attributes for read node
+    source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
+    
+    # Attributes for write node
+    write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
+    destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
+    file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
+    bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
 
-	# Render frame range, and frame increment
-	start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-	end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-	increment = TaskAttribute(default_value=1, configurable=True, attribute_type=int, 
-		description="The increments to use when rendering. Ex: 10 will render every 10th frame."
-	)
+    # Render frame range, and frame increment
+    start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    increment = TaskAttribute(default_value=1, configurable=True, attribute_type=int, 
+        description="The increments to use when rendering. Ex: 10 will render every 10th frame."
+    )
 
-	def __init__(self, **kwargs):
-		""" Initialize the NukeRender Object
+    def __init__(self, **kwargs):
+        """ Initialize the NukeRender Object
 
-			Kwargs:
-		"""
-		super(NukeRender, self).__init__(**kwargs)
-		self.executable = "Nuke 12.2v2.lnk"
+            Kwargs:
+        """
+        super(NukeRender, self).__init__(**kwargs)
+        self.executable = "Nuke 12.2v2.lnk"
 
-	def validate(self):
-		""" Preforms Validation checks for NukeRender Task.
+    def validate(self):
+        """ Preforms Validation checks for NukeRender Task.
 
-			Raises:
-				TaskValidationException: NukeRender task is not properly initialized
-		"""
-		pass
+            Raises:
+                TaskValidationException: NukeRender task is not properly initialized
+        """
+        pass
 
-	def setup(self):
-		""" Will create destination directory if it does not already exist.
+    def setup(self):
+        """ Will create destination directory if it does not already exist.
 
-			Raises: 
-				OSError: Unable to create destination directory
-		"""
-		pass
+            Raises: 
+                OSError: Unable to create destination directory
+        """
+        pass
 
-	def _find_bottom_node(self, node):
-		""" Finds the bottom node of the node tree that the supplied node belongs to.
+    def _find_bottom_node(self, node):
+        """ Finds the bottom node of the node tree that the supplied node belongs to.
 
-			Note: This function makes assumptions about the node tree.
-				1) There is no downward branching. (Multiple outputs are not allowed.)
-				2) The current node tree is not cyclic. (Not possible in nuke currently)
+            Note: This function makes assumptions about the node tree.
+                1) There is no downward branching. (Multiple outputs are not allowed.)
+                2) The current node tree is not cyclic. (Not possible in nuke currently)
 
-			Args:
-				node (Node): node of a node tree to check against.
-		"""
-			
-		dependents = node.dependent()
-		if len(dependents) == 0:
-			return node
+            Args:
+                node (Node): node of a node tree to check against.
+        """
+            
+        dependents = node.dependent()
+        if len(dependents) == 0:
+            return node
 
-		# Nuke does not allow for cyclic node graphs, so we can assume that this will eventually return.
-		return self._find_bottom_node(dependents[0])
+        # Nuke does not allow for cyclic node graphs, so we can assume that this will eventually return.
+        return self._find_bottom_node(dependents[0])
 
-	def _find_top_node(self, bottom_node):
-		""" Finds the top node from the supplied nodes inputs. an acceptable top_node
-			must accept 1 input, and not have anything connected. (Write, 
-			Constant, Merge, Switch, etc... are not acceptable)
+    def _find_top_node(self, bottom_node):
+        """ Finds the top node from the supplied nodes inputs. an acceptable top_node
+            must accept 1 input, and not have anything connected. (Write, 
+            Constant, Merge, Switch, etc... are not acceptable)
 
-			Will traverse up the node tree using depth-first traversal.
+            Will traverse up the node tree using depth-first traversal.
 
-			Note: This function makes assumptions about the node tree.
-				1) There is no downward branching. (Multiple outputs are not allowed.)
-				2) The current node tree is not cyclic. (Not possible in nuke currently)
+            Note: This function makes assumptions about the node tree.
+                1) There is no downward branching. (Multiple outputs are not allowed.)
+                2) The current node tree is not cyclic. (Not possible in nuke currently)
 
-			Args:
-				bottom_node (Node): Node to get the top node of.
-		"""
+            Args:
+                bottom_node (Node): Node to get the top node of.
+        """
 
-		inputs = bottom_node.inputs()
-		if inputs == 0 and bottom_node.maximumInputs() == 1:
-			return bottom_node
+        inputs = bottom_node.inputs()
+        if inputs == 0 and bottom_node.maximumInputs() == 1:
+            return bottom_node
 
-		for i in range(0, inputs):
-			input_node = bottom_node.input(i)
-			# Nuke does not allow for cyclic node graphs, so we can assume that this will eventually return.
-			top_node = self._find_top_node(input_node)
-			if top_node is not None:
-				return top_node
-		
-		# This node does not have any acceptable top_node nodes
-		return None
+        for i in range(0, inputs):
+            input_node = bottom_node.input(i)
+            # Nuke does not allow for cyclic node graphs, so we can assume that this will eventually return.
+            top_node = self._find_top_node(input_node)
+            if top_node is not None:
+                return top_node
+        
+        # This node does not have any acceptable top_node nodes
+        return None
 
-	def _append_nuke_script(self, script, current_bottom_node):
-		""" Will attach the supplied nuke script to the current_bottom_node.
+    def _append_nuke_script(self, script, current_bottom_node):
+        """ Will attach the supplied nuke script to the current_bottom_node.
 
-			Args: 
-				script (str): The script to to attach to the current_bottom_node
-				current_bottom_node (Node): The node to attach the script to. 
-					Should be the bottom of the current nuke script.
-		"""
-		import nuke
+            Args: 
+                script (str): The script to to attach to the current_bottom_node
+                current_bottom_node (Node): The node to attach the script to. 
+                    Should be the bottom of the current nuke script.
+        """
+        import nuke
 
-		# Unselect all nodes in the script
-		selected_nodes = nuke.selectedNodes()
-		for node in selected_nodes:
-			node.setSelected(False)
+        # Unselect all nodes in the script
+        selected_nodes = nuke.selectedNodes()
+        for node in selected_nodes:
+            node.setSelected(False)
 
-		# Paste the nodes from the other nuke script into this one.
-		nuke.nodePaste(script)
-		pasted_nodes = nuke.selectedNodes()
-		if len(pasted_nodes) == 0:
-			# Empty nuke script.
-			print("Supplied nuke script '{nuke_script}' is empty. Skipping.").format(nuke_script=script)
-			return current_bottom_node
+        # Paste the nodes from the other nuke script into this one.
+        nuke.nodePaste(script)
+        pasted_nodes = nuke.selectedNodes()
+        if len(pasted_nodes) == 0:
+            # Empty nuke script.
+            print("Supplied nuke script '{nuke_script}' is empty. Skipping.").format(nuke_script=script)
+            return current_bottom_node
 
-		# Check for the nodes indicating the top and bottom of the nuke script.
-		top_node = nuke.toNode("top")
-		bottom_node = nuke.toNode("bottom")
+        # Check for the nodes indicating the top and bottom of the nuke script.
+        top_node = nuke.toNode("top")
+        bottom_node = nuke.toNode("bottom")
 
-		# Rename the nodes so that the 'top' and 'bottom' nodes can be found in the next script that gets pasted.
-		if top_node is not None:
-			top_node.setName("top_1")
-		if bottom_node is not None:
-			top_node.setName("bottom_1")
+        # Rename the nodes so that the 'top' and 'bottom' nodes can be found in the next script that gets pasted.
+        if top_node is not None:
+            top_node.setName("top_1")
+        if bottom_node is not None:
+            top_node.setName("bottom_1")
 
-		# Node indicating the bottom node was not found. Use slightly more intelligent ways to determing the bottom_node
-		if bottom_node is None:
-			bottom_node = self._find_bottom_node(top_node)
+        # Node indicating the bottom node was not found. Use slightly more intelligent ways to determing the bottom_node
+        if bottom_node is None:
+            bottom_node = self._find_bottom_node(top_node)
 
-		# Node indicating the top node was not found. Use slightly more intelligent ways to determing the top_node
-		if top_node is None:
-			top_node = self._find_top_node(bottom_node)
+        # Node indicating the top node was not found. Use slightly more intelligent ways to determing the top_node
+        if top_node is None:
+            top_node = self._find_top_node(bottom_node)
 
-		# No acceptable top_node found. don't connect anything.
-		if top_node is None:
-			print("Supplied nuke script '{nuke_script}' contains no acceptable top node. Skipping.").format(
-				nuke_script=script
-			)
-			return current_bottom_node
+        # No acceptable top_node found. don't connect anything.
+        if top_node is None:
+            print("Supplied nuke script '{nuke_script}' contains no acceptable top node. Skipping.").format(
+                nuke_script=script
+            )
+            return current_bottom_node
 
-		# Connect the current_bottom_node to the new scripts top_node. 
-		# current_bottom_node will be None for an empty nuke script
-		if current_bottom_node is not None:
-			top_node.set_input(0, current_bottom_node)
+        # Connect the current_bottom_node to the new scripts top_node. 
+        # current_bottom_node will be None for an empty nuke script
+        if current_bottom_node is not None:
+            top_node.set_input(0, current_bottom_node)
 
-		return bottom_node, top_node
+        return bottom_node, top_node
 
-	def _concatenate_nuke_scripts(self):
-		top_node = None
-		current_bottom_node = None
-		for script in self.scripts:
-			_, ext = os.path.splitext(script)
-			if ext == ".py":
-				# TODO: execute python scripts (HOW???) Look into pyscript_knob
-				# https://learn.foundry.com/nuke/developers/70/pythonreference/
-				pass
-			elif ext == ".nk":
-				current_bottom_node, top_node = self._append_nuke_script(script, current_bottom_node)
-		return current_bottom_node, top_node
+    def _concatenate_nuke_scripts(self):
+        top_node = None
+        current_bottom_node = None
+        for script in self.scripts:
+            _, ext = os.path.splitext(script)
+            if ext == ".py":
+                # TODO: execute python scripts (HOW???) Look into pyscript_knob
+                # https://learn.foundry.com/nuke/developers/70/pythonreference/
+                pass
+            elif ext == ".nk":
+                current_bottom_node, top_node = self._append_nuke_script(script, current_bottom_node)
+        return current_bottom_node, top_node
 
 
-	def run(self):
-		""" Performs the nuke render.
-		"""
+    def run(self):
+        """ Performs the nuke render.
+        """
 
-		# Import nuke here because the main engine which creates the tasks will not be run in a nuke process.
-		import nuke
+        # Import nuke here because the main engine which creates the tasks will not be run in a nuke process.
+        import nuke
 
-		# Concatenate all the nuke scripts in the self.scripts list into a single nuke script.
-		bottom_node, top_node = self._concatenate_nuke_scripts()
+        # Concatenate all the nuke scripts in the self.scripts list into a single nuke script.
+        bottom_node, top_node = self._concatenate_nuke_scripts()
 
-		# Create Read node for self.source
-		read_node = nuke.toNode("Read")
-		read_node.knob("file").setValue(self.source)
-		top_node.setInput(0, read_node)
+        # Create Read node for self.source
+        read_node = nuke.toNode("Read")
+        read_node.knob("file").setValue(self.source)
+        top_node.setInput(0, read_node)
 
-		# Create Write node for self.destination
-		write_node = nuke.createNode(self.write_node_class)
-		write_node.knob("file").setValue(self.destination)
-		write_node.knob("file_type").setValue(self.file_type)
-		write_node.knob("datatype").setValue(self.bit_depth)
-		write_node.setInput(0, bottom_node)
+        # Create Write node for self.destination
+        write_node = nuke.createNode(self.write_node_class)
+        write_node.knob("file").setValue(self.destination)
+        write_node.knob("file_type").setValue(self.file_type)
+        write_node.knob("datatype").setValue(self.bit_depth)
+        write_node.setInput(0, bottom_node)
 
-		# Save out the generated nuke script.
-		script_path = "{root_dir}/{task_name}.nk".format(
-			root_dir=self.temp_dir,
-			task_name=self.name,
-		)
-		nuke.scriptSaveAs(script_path)
+        # Save out the generated nuke script.
+        script_path = "{root_dir}/{task_name}.nk".format(
+            root_dir=self.temp_dir,
+            task_name=self.name,
+        )
+        nuke.scriptSaveAs(script_path)
 
-		# Execute the write node to kick off the render.
-		nuke.execute(write_node.knob("name").value(), self.start_frame, self.end_frame, self.increment)
+        # Execute the write node to kick off the render.
+        nuke.execute(write_node.knob("name").value(), self.start_frame, self.end_frame, self.increment)
