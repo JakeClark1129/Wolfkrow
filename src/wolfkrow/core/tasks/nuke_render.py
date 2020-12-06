@@ -29,6 +29,22 @@ class NukeRender(Task):
     destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
     file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
     bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
+    codec = TaskAttribute(default_value=8, configurable=True, attribute_options=range(0, 13), attribute_type=int, description="""Which Codec to render the quicktime with.
+        0 - Apple ProRes 4444 XQ
+        1 - Apple ProRes 4444
+        2 - Apple ProRes 422 HQ
+        3 - Apple ProRes 422
+        4 - Apple ProRes 422 LT
+        5 - Apple ProRes 422 Proxy
+        6 - Avid DNxHD codec
+        7 - N/A
+        8 - Photo - JPEG
+        9 - MPEG-1 Video
+        10 - MPEG-4 Video
+        11 - PNG
+        12 - Animation
+        13 - Uncompressed 10-bit 4:2:2
+    """)
 
     # Render frame range, and frame increment
     start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
@@ -134,6 +150,7 @@ class NukeRender(Task):
         # Check for the nodes indicating the top and bottom of the nuke script.
         top_node = nuke.toNode("top")
         bottom_node = nuke.toNode("bottom")
+        random_node = pasted_nodes[0]
 
         # Rename the nodes so that the 'top' and 'bottom' nodes can be found in the next script that gets pasted.
         if top_node is not None:
@@ -143,7 +160,7 @@ class NukeRender(Task):
 
         # Node indicating the bottom node was not found. Use slightly more intelligent ways to determing the bottom_node
         if bottom_node is None:
-            bottom_node = self._find_bottom_node(top_node)
+            bottom_node = self._find_bottom_node(top_node or random_node)
 
         # Node indicating the top node was not found. Use slightly more intelligent ways to determing the top_node
         if top_node is None:
@@ -188,15 +205,22 @@ class NukeRender(Task):
         bottom_node, top_node = self._concatenate_nuke_scripts()
 
         # Create Read node for self.source
-        read_node = nuke.toNode("Read")
+        read_node = nuke.createNode("Read")
         read_node.knob("file").setValue(self.source)
+        read_node.knob("first").setValue(self.start_frame)
+        read_node.knob("last").setValue(self.end_frame)
         top_node.setInput(0, read_node)
 
         # Create Write node for self.destination
         write_node = nuke.createNode(self.write_node_class)
         write_node.knob("file").setValue(self.destination)
         write_node.knob("file_type").setValue(self.file_type)
-        write_node.knob("datatype").setValue(self.bit_depth)
+
+        if self.file_type in ["exr", "dpx", "png", "tiff", "sgi"]:
+            write_node.knob("datatype").setValue(self.bit_depth)
+        elif self.file_type in ["mov"]:
+            write_node.knob("mov64_codec").setValue(self.codec)
+
         write_node.setInput(0, bottom_node)
 
         # Save out the generated nuke script.
@@ -208,3 +232,4 @@ class NukeRender(Task):
 
         # Execute the write node to kick off the render.
         nuke.execute(write_node.knob("name").value(), self.start_frame, self.end_frame, self.increment)
+        return 0
