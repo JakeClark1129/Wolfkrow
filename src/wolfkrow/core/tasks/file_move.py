@@ -66,4 +66,4 @@ class FileMove(Task):
         """
 
         shutil.move(self.source, self.destination)
-        return True
+        return 0

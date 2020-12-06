@@ -68,18 +68,18 @@ class SequenceTask(Task):
         self.setup()
         try: 
             failed_frames = []
-            success = True
+            success = 0
             for frame in range(self.start_frame, self.end_frame):
                 result = self.run(frame)
                 if not result:
-                    success = False
+                    success = 1
                     failed_frames.append(frame)
         except Exception as e:
             traceback.print_exc()
             logging.error("Run method for task '%s' Failed. Reason: %s" % (self.name, e))
-            return False
+            return 1
 
-        if not success:
+        if success != 0:
             logging.error("Run method for task '%s' Failed for frames: {failed_frame}.".format(self.name, failed_frames))
 
         return success

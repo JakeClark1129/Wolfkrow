@@ -66,4 +66,4 @@ class FileCopy(Task):
         """
 
         shutil.copy2(self.source, self.destination)
-        return True
+        return 0

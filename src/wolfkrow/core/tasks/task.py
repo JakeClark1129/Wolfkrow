@@ -86,7 +86,7 @@ class TaskAttribute(object):
                 raise TypeError("Invalid value %r received. Expected one of %s" % (value, self.attribute_options))
         if self.attribute_type is not None:
             if not isinstance(value, self.attribute_type):
-                raise TypeError("Invalid type %r received. Expected %s" % (type(value), self.attribute_type))
+                raise TypeError("Invalid type '%s' received. Expected %s" % (type(value), self.attribute_type))
 
         self.data[instance] = value
 
@@ -186,7 +186,7 @@ class Task():
         except Exception as e:
             traceback.print_exc()
             logging.error("Run method for task '%s' Failed. Reason: %s" % (self.name, e))
-            return False
+            return 1
 
     def validate(self):
         """ Abstract method for Validating that this task Object was properly created. 
@@ -251,7 +251,11 @@ class Task():
         file_path = os.path.join(temp_dir, script_name)
         
         obj_str = repr(self)
-        contents = "from {module} import {obj_type}\ncallable = {obj_str}\ncallable()".format(
+        contents = """
+from {module} import {obj_type}
+callable = {obj_str}
+ret = callable()
+sys.exit(ret)""".format(
             module=self.__class__.__module__,
             obj_type=self.__class__.__name__,
             obj_str=obj_str

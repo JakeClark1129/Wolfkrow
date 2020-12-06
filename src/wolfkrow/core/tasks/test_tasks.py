@@ -12,7 +12,7 @@ class TestTask_Successful(task.Task):
         return True
 
     def run(self):
-        return True
+        return 0
 
 
 class TestTask_Failed_Validate(task.Task):
@@ -26,7 +26,7 @@ class TestTask_Failed_Validate(task.Task):
         return True
 
     def run(self):
-        return True
+        return 0
 
 
 class TestTask_Failed_Run(task.Task):
@@ -53,4 +53,4 @@ class TestSequence(sequence_task.SequenceTask):
     
     def run(self, frame):
         print(frame)
-        return True
+        return 0
