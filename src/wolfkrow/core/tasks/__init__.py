@@ -6,6 +6,17 @@ all_tasks = {}
 # Note: Will always search this current directory plus all directories found in 
 # the 'WOLFKROW_TASK_SEARCH_PATHS' environment variable.
 
+from os.path import dirname, basename, isfile, join
+import glob
+modules = glob.glob(join(dirname(__file__), "*.py"))
+ignored_modules = ["__init__.py"]
+__all__ = [ basename(f)[:-3] for f in modules if isfile(f) and basename(f) not in ignored_modules]
+
+# Search current direcotry first.
+from . import *
+
+# Search direcotries found in the WOLFKROW_TASK_SEARCH_PATHS.
+# Note: Tasks defined more than once will overwrite and previous definitions found.
 import platform
 if platform.system() == "Windows":
     path_sep = ";"
@@ -27,11 +38,3 @@ if search_paths:
                     )
                     file_path = os.path.join(item, file_name)
                     imp.load_source(module_name, file_path)
-
-from os.path import dirname, basename, isfile, join
-import glob
-modules = glob.glob(join(dirname(__file__), "*.py"))
-ignored_modules = ["__init__.py"]
-__all__ = [ basename(f)[:-3] for f in modules if isfile(f) and basename(f) not in ignored_modules]
-
-from . import *
