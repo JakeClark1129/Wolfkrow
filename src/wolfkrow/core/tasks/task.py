@@ -252,6 +252,7 @@ class Task():
         
         obj_str = repr(self)
         contents = """
+import sys
 from {module} import {obj_type}
 callable = {obj_str}
 ret = callable()
