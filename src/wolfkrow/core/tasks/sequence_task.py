@@ -69,7 +69,7 @@ class SequenceTask(Task):
         try: 
             failed_frames = []
             success = 0
-            for frame in range(self.start_frame, self.end_frame):
+            for frame in range(self.start_frame, self.end_frame + 1):
                 result = self.run(frame)
                 if not result:
                     success = 1

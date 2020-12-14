@@ -68,6 +68,10 @@ class TaskGraph(object):
         edges = [(dependency, task.name) for dependency in task.dependencies]
         self._graph.add_edges_from(edges)
 
+    def add_tasks(self, tasks):
+        for task in tasks:
+            self.add_task(task)
+
     def validate_task_graph(self):
         """ Validates the current Task graph.
 

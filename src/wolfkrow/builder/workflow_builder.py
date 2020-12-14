@@ -65,15 +65,15 @@ class Loader(object):
         return value
 
     def _replace_replacements(self, value):
-         # Check for SGTK templates defined in the template.
+         # Check for SGTK templates defined in the config.
         regexp = "(SGTKTEMPLATE{)(.*)(})"
         replace_str = "SGTKTEMPLATE{{{}}}"
         matches = re.findall(regexp, value)
         for match in matches:
-            template_name = match.group(2)
+            template_name = match[1]
             template_value = self._get_sgtk_template_value(template_name)
             if template_value:
-                sub = replace_str.format(match.group(2))
+                sub = replace_str.format(match[1])
                 value = value.replace(sub, template_value)
 
         # Replace the remaining replacements.
@@ -86,13 +86,12 @@ class Loader(object):
             with open(config_file, "r") as handle:
                 file_contents = handle.read()
 
-            config_snippet = yaml.load(file_contents, Loader=yaml.
-            FullLoader)
+            config_snippet = yaml.load(file_contents, Loader=yaml.Loader)
             config.update(config_snippet)
 
         # replace replacements
         for replacement in config['replacements']:
-            # Should configured replacements overwrite replacements that are passed 
+            # TODO: Should configured replacements overwrite replacements that are passed 
             # into the tool, or viceversa?
             self.replacements.update(replacement)
 
@@ -152,7 +151,7 @@ class Loader(object):
 
     def parse_workflow(self, workflow_name):
 
-        task_graph = TaskGraph("workflow", replacements=self.replacements)
+        task_graph = TaskGraph(workflow_name, replacements=self.replacements)
         workflow_tasks = None
         for workflow in self.config['workflows']:
             if workflow_name in workflow.keys():
@@ -182,7 +181,7 @@ class Loader(object):
             task = task_obj.from_dict(task_data)
             task_graph.add_task(task)
 
-        task_graph.execute_local()
+        return task_graph
 
 
 if __name__ == "__main__":
