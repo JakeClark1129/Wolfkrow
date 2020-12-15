@@ -23,7 +23,7 @@ class NukeRender(Task):
 
     # Attributes for read node
     source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
-    
+
     # Attributes for write node
     write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
     destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
@@ -45,12 +45,47 @@ class NukeRender(Task):
         12 - Animation
         13 - Uncompressed 10-bit 4:2:2
     """)
+    compression = TaskAttribute(default_value=None, attribute_type=int, description="""Which Compression to use when writing the file. This value is only used when 
+writing exr, sgi, targa, or tiff files. Each file type has its own options. See below:
+    EXR:
+        0 - ZIP (1 scanlines)
+        1 - ZIP (16 scanlines)
+        2 - PIZ Wavelet (32 scanlines)
+        3 - RLE
+        4 - B44
+        5 - B44a
+        6 - DWAA
+        7 - DWAB
+    
+    SGI:
+        0 - none
+        1 - RLE
+
+    TARGA:
+        0 - none
+        1 - RLE
+
+    TIFF:
+        0 - none
+        1 - PackBits
+        2 - LZW
+        3 - Deflate
+    """)
 
     # Render frame range, and frame increment
     start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
     end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-    increment = TaskAttribute(default_value=1, configurable=True, attribute_type=int, 
+    increment = TaskAttribute(
+        default_value=1, 
+        configurable=True, 
+        attribute_type=int, 
         description="The increments to use when rendering. Ex: 10 will render every 10th frame."
+    )
+    additional_write_node_properties = TaskAttribute(
+        default_value=None, 
+        configurable=True, 
+        attribute_type=dict, 
+        description="Dictionary containing key value pairs as 'knob_name': 'knob_value'"
     )
 
     def __init__(self, **kwargs):
@@ -100,7 +135,8 @@ class NukeRender(Task):
             must accept 1 input, and not have anything connected. (Write, 
             Constant, Merge, Switch, etc... are not acceptable)
 
-            Will traverse up the node tree using depth-first traversal.
+            Will traverse up the node tree using depth-first traversal, and returns 
+            the first acceptable node found.
 
             Note: This function makes assumptions about the node tree.
                 1) There is no downward branching. (Multiple outputs are not allowed.)
@@ -139,15 +175,25 @@ class NukeRender(Task):
         for node in selected_nodes:
             node.setSelected(False)
 
+        if not os.path.exists(script):
+            print("Supplied nuke script '{nuke_script}' does not exist. Skipping...".format(
+                    nuke_script=script
+                )
+            )
+            return current_bottom_node
+
         # Paste the nodes from the other nuke script into this one.
         nuke.nodePaste(script)
         pasted_nodes = nuke.selectedNodes()
         if len(pasted_nodes) == 0:
             # Empty nuke script.
-            print("Supplied nuke script '{nuke_script}' is empty. Skipping.").format(nuke_script=script)
+            print("Supplied nuke script '{nuke_script}' is empty. Skipping...".format(
+                    nuke_script=script
+                )
+            )
             return current_bottom_node
 
-        # Check for the nodes indicating the top and bottom of the nuke script.
+        # Check for the nodes indicating the top and bottom of the pasted nuke script.
         top_node = nuke.toNode("top")
         bottom_node = nuke.toNode("bottom")
         random_node = pasted_nodes[0]
@@ -178,10 +224,9 @@ class NukeRender(Task):
         if current_bottom_node is not None:
             top_node.set_input(0, current_bottom_node)
 
-        return bottom_node, top_node
+        return bottom_node
 
     def _concatenate_nuke_scripts(self):
-        top_node = None
         current_bottom_node = None
         for script in self.scripts:
             _, ext = os.path.splitext(script)
@@ -190,8 +235,8 @@ class NukeRender(Task):
                 # https://learn.foundry.com/nuke/developers/70/pythonreference/
                 pass
             elif ext == ".nk":
-                current_bottom_node, top_node = self._append_nuke_script(script, current_bottom_node)
-        return current_bottom_node, top_node
+                current_bottom_node = self._append_nuke_script(script, current_bottom_node)
+        return current_bottom_node
 
 
     def run(self):
@@ -202,14 +247,22 @@ class NukeRender(Task):
         import nuke
 
         # Concatenate all the nuke scripts in the self.scripts list into a single nuke script.
-        bottom_node, top_node = self._concatenate_nuke_scripts()
+        bottom_node = self._concatenate_nuke_scripts()
+
+        top_node = None
+        # bottom_node will be None when there is no 'scripts' in self.scripts (or 
+        # all scripts are empty/invalid)
+        if bottom_node:
+            # Determine the top node of the script, in order to attach a read node to it.
+            top_node = self._find_top_node(bottom_node)
 
         # Create Read node for self.source
         read_node = nuke.createNode("Read")
         read_node.knob("file").setValue(self.source)
         read_node.knob("first").setValue(self.start_frame)
         read_node.knob("last").setValue(self.end_frame)
-        top_node.setInput(0, read_node)
+        if top_node:
+            top_node.setInput(0, read_node)
 
         # Create Write node for self.destination
         write_node = nuke.createNode(self.write_node_class)
@@ -220,6 +273,20 @@ class NukeRender(Task):
             write_node.knob("datatype").setValue(self.bit_depth)
         elif self.file_type in ["mov"]:
             write_node.knob("mov64_codec").setValue(self.codec)
+
+        if self.file_type in ["exr", "sgi", "targa", "tiff"]:
+            if self.compression:
+                write_node.knob("compression").setValue(self.compression)
+
+        # Set values for arbitrary knobs and values.
+        if self.additional_write_node_properties:
+            for key, value in self.additional_write_node_properties.items():
+                if key in write_node.knobs():
+                    write_node.knob(key).setValue(value)
+
+        # If there is no bottom node, set the read node as the bottom_node
+        if not bottom_node:
+            bottom_node = read_node
 
         write_node.setInput(0, bottom_node)
 
