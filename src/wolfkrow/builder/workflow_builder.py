@@ -1,4 +1,4 @@
-
+import copy
 import os
 import re
 import string
@@ -47,38 +47,48 @@ class Loader(object):
         
         return self.__config
 
-    def _get_sgtk_template_value(self, template_name):
-        """ Will attempt to find the given template name in the sgtk instace, and 
-            then use the replacements dict as the fields to get the substituted
-            template.
-        """
+    def _update_config(self, current_dict, new_dict):
+        
+        # # Generic solution:
+        # for key, value in new_dict.items():
+        #     if key in current_dict:
+        #         if type(value) != type(current_dict[key]):
+        #             current_dict[key] = value
+        #         elif isinstance(dict, value):
+        #             self._update_config(current_dict[key], value)
+        #         elif isinstance(list, value) or isinstance(set, value):
+        #             for item in value:
+        #                 pass
 
-        if self._sgtk is None:
-            # TODO: ERROR: Workflow builder initialized without sgtk instance, BUT sgtk templates found in workflow.
-            return None
+        # Custom solution:
+        # Top level of the config. IE: task_attribute_defaults, replacements, tasks
+        workflow_dict = new_dict.get("workflows")
+        if workflow_dict:
+            if "workflows" not in current_dict:
+                current_dict["workflows"] = workflow_dict
+            else:
+                current_dict["workflows"].update(workflow_dict)
 
-        template = self._sgtk.templates.get(template_name)
-        if template is None:
-            return None
+        tasks_dict = new_dict.get("tasks")
+        if tasks_dict:
+            if "tasks" not in current_dict:
+                current_dict["tasks"] = tasks_dict
+            else:
+                current_dict["tasks"].update(tasks_dict)
 
-        value = template.apply_fields(self.replacements)
-        return value
+        replacements_dict = new_dict.get("replacements")
+        if replacements_dict:
+            if "replacements" not in current_dict:
+                current_dict["replacements"] = replacements_dict
+            else:
+                current_dict["replacements"].update(replacements_dict)
 
-    def _replace_replacements(self, value):
-         # Check for SGTK templates defined in the config.
-        regexp = "(SGTKTEMPLATE{)(.*)(})"
-        replace_str = "SGTKTEMPLATE{{{}}}"
-        matches = re.findall(regexp, value)
-        for match in matches:
-            template_name = match[1]
-            template_value = self._get_sgtk_template_value(template_name)
-            if template_value:
-                sub = replace_str.format(match[1])
-                value = value.replace(sub, template_value)
-
-        # Replace the remaining replacements.
-        value = string.Formatter().vformat(value, (), self.replacements)
-        return value
+        task_attribute_defaults = new_dict.get("task_attribute_defaults")
+        if task_attribute_defaults:
+            if "task_attribute_defaults" not in current_dict:
+                current_dict["task_attribute_defaults"] = task_attribute_defaults
+            else:
+                current_dict["task_attribute_defaults"].update(task_attribute_defaults)
 
     def _load_configs(self, config_file_paths):
         config = {}
@@ -87,29 +97,12 @@ class Loader(object):
                 file_contents = handle.read()
 
             config_snippet = yaml.load(file_contents, Loader=yaml.Loader)
-            config.update(config_snippet)
+            self._update_config(config, config_snippet)
 
         # replace replacements
-        for replacement in config['replacements']:
-            # TODO: Should configured replacements overwrite replacements that are passed 
-            # into the tool, or viceversa?
-            self.replacements.update(replacement)
-
-        def replace_replacements_dict_crawler(dictionary, replacements):
-            for key, value in dictionary.items():
-                if isinstance(value, dict):
-                    replace_replacements_dict_crawler(value, replacements)
-                elif isinstance(value, list):
-                    for index in range(len(value)):
-                        if isinstance(value[index], dict):
-                            replace_replacements_dict_crawler(value[index], replacements)
-                        elif isinstance(value[index], str):
-                            value[index] = string.Formatter().vformat(value[index], (), replacements)
-                elif isinstance(value, str):                    
-                    # Replace any replacements in the string.
-                    dictionary[key] = self._replace_replacements(value)
-
-        replace_replacements_dict_crawler(config, self.replacements)
+        # TODO: Should configured replacements overwrite replacements that are passed 
+        # into the tool, or viceversa?
+        self.replacements.update(config.get('replacements', {}))
 
         return config
 
@@ -126,10 +119,7 @@ class Loader(object):
                 List: List of constructed tasks.
         """
 
-        tasks_lookup = {}
-        for task in self.config['tasks']:
-            for task_name in task.keys():
-                tasks_lookup[task_name] = task[task_name]
+        tasks_lookup = self.config['tasks']
 
         tasks_list = []
         for task_name in task_names:
@@ -149,36 +139,40 @@ class Loader(object):
 
         return tasks_list
 
+    def get_default_task_data(self, task_name):
+        if task_name in self.config['task_attribute_defaults']:
+            return self.config['task_attribute_defaults'][task_name]
+        return {}
+
     def parse_workflow(self, workflow_name):
 
         task_graph = TaskGraph(workflow_name, replacements=self.replacements)
-        workflow_tasks = None
-        for workflow in self.config['workflows']:
-            if workflow_name in workflow.keys():
-                workflow_tasks = workflow[workflow_name]
-                break
+        workflow_tasks = self.config['workflows'].get(workflow_name)
         
         if workflow_tasks is None:
             raise Exception("Unable to find workflow '{}'".format(workflow_name))
-
-        tasks_lookup = {}
-        for task in self.config['tasks']:
-            for task_name in task.keys():
-                tasks_lookup[task_name] = task[task_name]
 
         #TODO: Add extra validation for the config file. (ensure tasks requested 
         # in the workflow section are defined in the tasks section)
         for task_name in workflow_tasks:
 
-            task_data = tasks_lookup.get(task_name)
+            # Get default task data dictionary
+            configured_task_data = self.config['tasks'].get(task_name)
+            if not configured_task_data:
+                #TODO: Warn about missing task definition but still continue without the task.
+                continue
 
-            task_obj = tasks.all_tasks.get(task_data['task_type'])
+            default_task_data = self.get_default_task_data(configured_task_data['task_type'])
+            task_data = copy.deepcopy(default_task_data)
+            task_data.update(configured_task_data)
+
+            task_obj = tasks.all_tasks.get(configured_task_data['task_type'])
             if task_obj is None:
                 #TODO: Warn about missing task definition but still continue without the task.
                 continue
             
             task_data['name'] = task_name
-            task = task_obj.from_dict(task_data)
+            task = task_obj.from_dict(task_data, replacements=self.replacements, config_files=self._config_file_paths, sgtk=self._sgtk)
             task_graph.add_task(task)
 
         return task_graph

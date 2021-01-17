@@ -8,7 +8,8 @@ import traceback
 
 from weakref import WeakKeyDictionary
 
-from .task_exceptions import TaskException
+from wolfkrow.core.tasks.task_exceptions import TaskException
+from wolfkrow.core import utils
 
 
 
@@ -114,23 +115,43 @@ class TaskType(type):
 
 @six.add_metaclass(TaskType)
 class Task():
-    """ Base Object used for every task. The TaskGraph will be used to build graph 
-        of tasks from configuration, which will later be executed as a series of 
-        tasks to complete a job.
+    """ Base Object used for every task. The TaskGraph will be used to build 
+        graph of tasks from configuration, which will later be executed as a 
+        series of tasks to complete a job.
 
-        Includes the following Abstract methods which must be overridden by children:
-            validate(self) - This method should validate that the Task Object was created correctly
-            setup(self) - This method should perform any setup tasks required for 
-                the primary run method to complete successfully.
-            run(self) - This method should do the bulk of the work
+        Includes the following methods to be overridden by children:
+            validate *Optional* - This method should validate that the Task 
+                Object was created correctly
+            
+            setup *Required* - This method should perform any setup required 
+                for the task to run successfully.
+            
+            run *Required* - This method should do the bulk of the work
+
+
+        The order of operations on a task is as follows:
+        Locally:
+            Validate -- Runs immediately after export is called.
+        Farm:
+            Setup -- Called immediately after the task object is executed.
+            Run -- Called immediately after the Setup method is called.
     """
 
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
+    config_files = TaskAttribute(
+        default_value={}, 
+        configurable=False, 
+        attribute_type=list, 
+        description="""List of config files used to reconstruct the Loader object 
+on the farm."""
+    )
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
+
     executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
 
     def __init__(self, **kwargs):
         """ Initializes Task object
@@ -150,11 +171,9 @@ class Task():
         
         if self.executable is None:
             self.executable = os.environ.get("WOLFKROW_DEFAULT_TASK_EXECUTABLE")
-            #TODO: put this into a validation function and raise at that point. 
-            # Currently this will cause issues if a task wants to set its own 
-            # executable in the __init__ method. 
-            if self.executable is None:
-                raise TaskException("WOLFKROW_DEFAULT_TASK_EXECUTABLE variable undefined and no executable specified.")
+
+        if self.executable_args is None:
+            self.executable_args = os.environ.get("WOLFKROW_DEFAULT_TASK_EXECUTABLE_ARGS")
 
     def copy(self):
         """ Creates a copy of itself.
@@ -189,16 +208,13 @@ class Task():
             return 1
 
     def validate(self):
-        """ Abstract method for Validating that this task Object was properly created. 
+        """ Method for Validating that this task Object was properly created. 
             Will raise an exception if validation fails
 
-            #TODO: When should this run? 
-                immediately before execution
-                before export?
-                by the task graph when it is added?
+            Validation happens as the first step of the export process.
         """
-        
-        raise NotImplementedError("validate method must be overridden by child class")
+        if self.executable is None:
+            raise TaskException("WOLFKROW_DEFAULT_TASK_EXECUTABLE variable undefined and no executable specified.")
 
     def setup(self):
         """ Abstract method for doing initial tasks required for the run method to 
@@ -219,10 +235,30 @@ class Task():
         raise NotImplementedError("run method must be overridden by child class")
 
 
-    def export(self, temp_dir, job_name):
-        """ Will Export this task into a stand alone python script to allow for synchronous 
-            execution of many tasks among many machines. This is intended to be used 
-            alongside a distributed render manager (Something like Tractor2, or deadline).
+    def export_to_command_line(self, deadline=False):
+        """ Will generate a `wolfkrow_run_task` command line command to run in order to 
+            re-construct and run this task via command line. 
+        """
+
+        arg_str = ""
+        for attribute_name, attribute_obj  in self.task_attributes.items():
+            if attribute_obj.serialize:
+                arg_str = "{arg_str} --{attribute_name} {value}".format(
+                        arg_str=arg_str,
+                        attribute_name=attribute_name,
+                        value=repr(attribute_obj.__get__(self)
+                    )
+                )
+
+        command = "wolfkrow_run_task.py {task_type} {task_args}".format(
+            task_type=self.__class__.__name__, 
+            task_args=arg_str
+        )
+
+        return (self, command)
+
+    def export_to_python_script(self, temp_dir, job_name):
+        """ Will Export this task into a stand alone python script in order to run this task later. 
             
             Note: This a fairly generic implementation that takes advantage of 
                 __repr__ on each task, then does some logic to determine imports 
@@ -236,8 +272,6 @@ class Task():
             returns:
                 (str) - The file path to the exported task.
         """
-
-        self.validate()
 
         def sub_space_for_underscore(string):
             return string.strip().replace(" ", "_")
@@ -266,6 +300,33 @@ sys.exit(ret)""".format(
             handle.write(contents)
         return (self, file_path)
 
+    def export(self, export_type, temp_dir=None, job_name=None):
+        """ Will Export this task in order to run later. This is to allow for 
+            synchronous execution of many tasks among many machines. Intended 
+            to be used alongside a distributed render manager (Something like 
+            Tractor2, or deadline).
+
+            Args:
+                export_type (str): One of "CommandLine" or "PythonScript". chooses which type of export is desired.
+            
+            Kwargs:
+                temp_dir (str): Passed onto the PythonScript export method. 
+                Used to choose where to write the python script to.
+                job_name (str): Passed onto the PythonScript export method. 
+                Used to choose the name of the exported python script.
+
+            returns:
+                (self, created_obj) - created_obj will either be a command line string to run OR the file path to a python script.
+        """
+
+        self.validate()
+
+        if export_type == "CommandLine":
+            return self.export_to_command_line()
+        elif export_type == "PythonScript":
+            return self.export_to_python_script(temp_dir, job_name)
+
+
     def __repr__(self):
         """ Official string representation of self.
 
@@ -286,7 +347,7 @@ sys.exit(ret)""".format(
         return str(rep)
 
     @classmethod
-    def from_dict(cls, data_dict):
+    def from_dict(cls, data_dict, replacements=None, config_files=None):
         """ Generic implementation of the 'from_dict' method for converting a dictionary
             containing the data for a Task object into a Task object. For more control
             over the conversion process, please override this method on your custom 
@@ -297,13 +358,26 @@ sys.exit(ret)""".format(
 
             Args:
                 data_dict (dict): Dictionary containing the data to construct the Task object.
+            
+            Kwargs:
+                replacements (dict): A dictionary of string replacements.
+                config_files (list): List of file paths used as the configuration 
+                    files which constructed this task.
         """
 
         filtered_data_dict = {}
         # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
+        if replacements:
+            utils.replace_replacements_dict_crawler(data_dict, replacements)
+        else:
+            #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
+            pass
+
         for key, value in data_dict.items():
             if value is not None:
                 filtered_data_dict[key] = value
+        
+        filtered_data_dict["config_files"] = config_files
 
         obj = cls(**filtered_data_dict)
         return obj

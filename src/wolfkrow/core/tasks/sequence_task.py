@@ -36,6 +36,9 @@ class SequenceTask(Task):
                 TaskValidationException: Invalid frame range
                 TaskValidationException: Invalid Chunk size
         """
+
+        super(SequenceTask, self).validate()
+
         if self.chunk_size < 0:
             raise TaskValidationException("Chunk size must be a positive number")
 
@@ -80,7 +83,11 @@ class SequenceTask(Task):
             return 1
 
         if success != 0:
-            logging.error("Run method for task '%s' Failed for frames: {failed_frame}.".format(self.name, failed_frames))
+            logging.error("Run method for task '{name}' Failed for frames: {failed_frames}.".format(
+                    name=self.name, 
+                    failed_frames=failed_frames
+                )
+            )
 
         return success
 
@@ -96,6 +103,35 @@ class SequenceTask(Task):
         """
 
         raise NotImplementedError("run method must be overridden by child class")
+
+    def export_to_command_line(self, deadline=False):
+        """ Will generate a `wolfkrow_run_task` command line command to run in order to 
+            re-construct and run this task via command line. 
+                Note: Intended to be used on deadline. The "<START_FRAME>" and 
+                "<END_FRAME>" tokens are replaced by deadline.
+        """
+        arg_str = ""
+        for attribute_name, attribute_obj  in self.task_attributes.items():
+            if attribute_obj.serialize:
+                if deadline and attribute_name == "start_frame":
+                    value="<STARTFRAME>"
+                elif deadline and attribute_name == "end_frame":
+                    value = "<ENDFRAME>"
+                else:
+                    value = repr(attribute_obj.__get__(self))
+
+                arg_str = "{arg_str} --{attribute_name} {value}".format(
+                    arg_str=arg_str,
+                    attribute_name=attribute_name,
+                    value=value
+                )
+
+        command = "wolfkrow_run_task.py {task_type} {task_args}".format(
+            task_type=self.__class__.__name__, 
+            task_args=arg_str
+        )
+
+        return command
 
     def export(self, temp_dir, job_name):
         """ Will Export this task into a stand alone python script to allow for synchronous 

@@ -6,6 +6,7 @@
 import copy
 import logging
 import networkx
+import os
 import subprocess
 import tempfile
 
@@ -82,7 +83,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self):
+    def export_tasks(self, export_type="PythonScript", deadline=False):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -102,7 +103,11 @@ class TaskGraph(object):
         for task in tasks.values():
 
             # Export scripts for task.
-            exported = task.export(tempdir, self.name)
+            exported = task.export(
+                export_type=export_type, 
+                temp_dir=tempdir, 
+                job_name=self.name
+            )
 
             # If the task export returns a list, that mean it was a task which 
             # expanded into multiple other tasks. We need to add these new tasks 
@@ -116,6 +121,7 @@ class TaskGraph(object):
             for exported_task in exported:
                 exported_tasks[exported_task[0].name] = {
                     "executable": task.executable,
+                    "executable_args": task.executable_args,
                     "script": exported_task[1],
                     "obj": exported_task[0],
                 }
@@ -124,7 +130,7 @@ class TaskGraph(object):
 
     def execute_local(self):
 
-        exported_tasks = self.export_tasks()
+        exported_tasks = self.export_tasks(export_type="CommandLine")
 
         results = {}
         taskExecutionOrder = networkx.topological_sort(self._graph)
@@ -142,15 +148,23 @@ class TaskGraph(object):
                     break
 
             if not ready:
-                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.name)
+                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task['obj'].name)
                 continue
+
+            args = []
+            args.append(task['executable'])
+            if task['executable_args']:
+                executable_args = task['executable_args'].split(' ')
+                args.extend(executable_args)
+            script_args = filter(lambda x: bool(x), task['script'].split(' '))
+            args.append(script_args)
 
             #TODO: The python script being executed here can be a security liability 
             # since they can be modified between being written out, and being executed 
             # here. Either add a mechanism for ensuring they have not been modified 
             # or prevent them from being modified.
             process = subprocess.Popen(
-                [task["executable"], task["script"]],
+                args,
                 shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -167,31 +181,48 @@ class TaskGraph(object):
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
-    def execute_deadline(self):
-        #import Deadline.DeadlineConnect as Connect
-        #deadline = Connect.DeadlineCon(self._settings["deadline_server"], self._settings["deadline_port"])
-        deadline = None
+    def execute_deadline(self, batch_name=None, inherit_environment=True):
+        import Deadline.DeadlineConnect as Connect
+        deadline = Connect.DeadlineCon(
+            self._settings["deadline"]["host_name"],
+            self._settings["deadline"]["port"])
 
-        def submit_task_to_deadline(task, deadline, dependencies):
+        def submit_task_to_deadline(task, deadline, dependencies, batch_name=None):
             dependencies_str = ",".join(dependencies)
+            batch_name = batch_name or self.name
             job_attrs = {
-				"Name": task['obj'].name,
-				"Plugin": "CommandLine",
-				"Executable": task['executable'], 
-				"Args": task['script'], 
-				"JobDependencies": dependencies_str
-			}
-
-            plugin_attrs = {
-
+                "Name": task['obj'].name,
+                "BatchName": batch_name,
+                "UserName": os.environ.get("USER"),
+                "Plugin": "CommandLine",
+                "JobDependencies": dependencies_str,
+                "Pool": "tech",
             }
 
-            job_id = task['obj'].name
-            #job_id = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
-            print("Job: {}".format(job_id))
-            return job_id
+            # Add Environment variables.
+            if inherit_environment:
+                var_index = 0
+                for key, value in os.environ.items():
+                    job_attrs['EnvironmentKeyValue%s' % var_index] = "%s=%s" % (key, value)
+                    var_index += 1
 
-        exported_tasks = self.export_tasks()
+            if task['executable_args']:
+                arguments = " ".join(task['executable_args']) + " " + task['script']
+            else:
+                arguments = " " + task['script']
+
+            plugin_attrs = {
+                "Executable":task['executable'],
+                "Arguments":arguments,
+            }
+
+            job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
+            print("Job: {}".format(job))
+            return job
+
+
+        exported_tasks = self.export_tasks(export_type="CommandLine", deadline=True)
+        deadline_jobs = {}
 
         results = {}
         taskExecutionOrder = networkx.topological_sort(self._graph)
@@ -202,14 +233,21 @@ class TaskGraph(object):
                 continue
 
             job_dependencies = []
-            for dependencyName in task['obj'].dependencies:
+            for dependency_name in task['obj'].dependencies:
                 # If the dependency has no deadline_id, it means it was never actually added it to the task graph.
-                dependency = exported_tasks.get(dependencyName)
+                dependency = exported_tasks.get(dependency_name)
                 if dependency and "deadline_id" in dependency:
                     job_dependencies.append(dependency['deadline_id'])
 
-            deadline_id = submit_task_to_deadline(task, deadline, job_dependencies)
-            task['deadline_id'] = deadline_id
+            deadline_job = submit_task_to_deadline(
+                task, 
+                deadline, 
+                job_dependencies, 
+                batch_name=batch_name
+            )
+            deadline_jobs[task_name] = deadline_job
+            task['deadline_id'] = deadline_job["_id"]
+        return deadline_jobs
 
     def execute_legacy(self):
         """ Executes the task graph.

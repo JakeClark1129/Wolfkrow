@@ -1,19 +1,24 @@
+task_attribute_defaults:
+  NukeRender:
+    executable: "nuke"
+    executable_args: "-t"
+
 replacements:
- - new_name: moved
+  new_name: moved
 
 tasks:
- - copy_source:
+  copy_source:
     task_type: FileCopy
     dependencies:
     source: C:\Projects\Wolfkrow\src\wolfkrow\builder\config_file.yaml
     destination: C:\backups
- - rename_source:
+  rename_source:
     task_type: FileMove
     dependencies: 
       - copy_source
     source: C:\backups\config_file.yaml
     destination: C:\backups\new_name.yaml
- - convert_to_tiff: 
+  convert_to_tiff: 
     task_type: NukeRender
     dependencies:
     source: C:\temp\test_sequence\seq.%04d.exr
@@ -28,8 +33,8 @@ tasks:
     bit_depth: 8 bit
 
 workflows:
-  - test_workflow: 
+  test_workflow: 
     - copy_source
     - rename_source
-  - Convert to Tiff: 
+  Convert to Tiff: 
     - convert_to_tiff

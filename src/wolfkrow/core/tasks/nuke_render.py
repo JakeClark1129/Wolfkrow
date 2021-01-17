@@ -102,7 +102,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             Raises:
                 TaskValidationException: NukeRender task is not properly initialized
         """
-        pass
+        super(NukeRender, self).validate()
 
     def setup(self):
         """ Will create destination directory if it does not already exist.
@@ -110,7 +110,13 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             Raises: 
                 OSError: Unable to create destination directory
         """
-        pass
+        directory = os.path.dirname(self.destination)
+        if not os.path.exists(directory):
+            try:
+                os.makedirs(directory)
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
 
     def _find_bottom_node(self, node):
         """ Finds the bottom node of the node tree that the supplied node belongs to.
@@ -295,7 +301,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             root_dir=self.temp_dir,
             task_name=self.name,
         )
-        nuke.scriptSaveAs(script_path)
+        nuke.scriptSaveAs(script_path, overwrite=1)
 
         # Execute the write node to kick off the render.
         nuke.execute(write_node.knob("name").value(), self.start_frame, self.end_frame, self.increment)
