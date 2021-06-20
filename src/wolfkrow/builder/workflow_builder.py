@@ -135,9 +135,13 @@ class Loader(object):
         tasks_list = []
         for task_name in task_names:
 
-            task_data = tasks_lookup.get(task_name)
-            if task_data is None:
+            configured_task_data = tasks_lookup.get(task_name)
+            if configured_task_data is None:
                 continue
+
+            default_task_data = self.get_default_task_data(configured_task_data['task_type'])
+            task_data = copy.deepcopy(default_task_data)
+            task_data.update(configured_task_data)
 
             task_obj = tasks.all_tasks.get(task_data['task_type'])
             if task_obj is None:
@@ -149,8 +153,9 @@ class Loader(object):
             task = task_obj.from_dict(
                 task_data, 
                 replacements=self.replacements, 
-                config_files=self._config_file_path, 
+                config_files=self._config_file_paths, 
                 temp_dir=self.temp_dir,
+                sgtk=self._sgtk
             )
             tasks_list.append(task)
 
@@ -191,7 +196,7 @@ class Loader(object):
             if task_obj is None:
                 #TODO: Warn about missing task definition but still continue without the task.
                 continue
-            
+
             task_data['name'] = task_name
             task_data['config'] = self.config
             task = task_obj.from_dict(
@@ -199,12 +204,8 @@ class Loader(object):
                 replacements=self.replacements, 
                 config_files=self._config_file_paths, 
                 temp_dir=self.temp_dir,
+                sgtk=self._sgtk
             )
             task_graph.add_task(task)
 
         return task_graph
-
-
-if __name__ == "__main__":
-    loader = Loader([r"C:\Projects\Wolfkrow\src\wolfkrow\builder\config_file.yaml"])
-    loader.parse_workflow("Convert to Tiff")

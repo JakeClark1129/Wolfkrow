@@ -1,0 +1,2 @@
+#!/bin/bash
+python ./wolfkrow_run_task.py $@

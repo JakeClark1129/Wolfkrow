@@ -4,13 +4,14 @@ import string
 import yaml
 
 
+settings = None 
 def load_settings(settings_file):
+    global settings
     with open(settings_file, "r") as handle:
         file_contents = handle.read()
-    settings = yaml.load(file_contents, Loader=yaml.FullLoader)
+    settings = yaml.load(file_contents, Loader=yaml.Loader)
     return settings
 
-settings = None
 default_settings_file = os.path.join(os.path.dirname(__file__), "settings.yaml")
 load_settings(default_settings_file)
 
@@ -39,11 +40,11 @@ def replace_replacements_dict_crawler(dictionary, replacements, sgtk=None):
 
     for key, value in dictionary.items():
         if isinstance(value, dict):
-            replace_replacements_dict_crawler(value, replacements)
+            replace_replacements_dict_crawler(value, replacements, sgtk=sgtk)
         elif isinstance(value, list):
             for index in range(len(value)):
                 if isinstance(value[index], dict):
-                    replace_replacements_dict_crawler(value[index], replacements)
+                    replace_replacements_dict_crawler(value[index], replacements, sgtk=sgtk)
                 elif isinstance(value[index], str):
                     value[index] = string.Formatter().vformat(value[index], (), replacements)
         elif isinstance(value, str):                    
@@ -84,10 +85,20 @@ def _get_sgtk_template_value(template_name, replacements, sgtk=None):
     if template is None:
         return None
 
+    # Ensure that the replacements dict contains all the fields required for the template.
     missing_fields = template.missing_keys(replacements)
     if len(missing_fields) > 0:
         return None
 
-    value = template.apply_fields(replacements)
+    # Attempt to convert the fields to the correct type before calling 
+    # apply_fields for the template.
+    corrected_fields = {}
+
+    for field in template.keys:
+        if field in replacements:
+            corrected_fields[field] = template.keys[field].value_from_str(replacements[field])
+
+
+    value = template.apply_fields(corrected_fields)
     return value
 # ==============================================================================
