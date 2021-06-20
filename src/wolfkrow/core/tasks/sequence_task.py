@@ -110,6 +110,7 @@ class SequenceTask(Task):
                 Note: Intended to be used on deadline. The "<START_FRAME>" and 
                 "<END_FRAME>" tokens are replaced by deadline.
         """
+
         arg_str = ""
         for attribute_name, attribute_obj  in self.task_attributes.items():
             if attribute_obj.serialize:
@@ -133,7 +134,7 @@ class SequenceTask(Task):
 
         return command
 
-    def export(self, temp_dir, job_name):
+    def export_to_python_script(self, temp_dir, job_name):
         """ Will Export this task into a stand alone python script to allow for synchronous 
             execution of many tasks among many machines. This is intended to be used 
             alongside a distributed render manager (Something like Tractor2, or deadline).

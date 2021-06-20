@@ -118,6 +118,17 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 if e.errno != errno.EEXIST:
                     raise
 
+    def export_to_command_line(self, deadline=False):
+        """ Will generate a `wolfkrow_run_task` command line command to run in order to 
+            re-construct and run this task via command line. 
+
+            Appends a '--' to the end of the command because nuke will try to execute
+            accept the last arguments as a frame number/range.
+        """
+        obj, command = super(NukeRender, self).export_to_command_line(deadline=deadline)
+        command = "{} --".format(command)
+        return (obj, command)
+
     def _find_bottom_node(self, node):
         """ Finds the bottom node of the node tree that the supplied node belongs to.
 

@@ -29,7 +29,7 @@ class TaskGraph(object):
     """ Provides an interface to build, and execute a series of tasks.
     """
 
-    def __init__(self, name, replacements=None):
+    def __init__(self, name, replacements=None, temp_dir=None):
         """ Initializes TaskGraph object.
 
             Args: 
@@ -37,12 +37,15 @@ class TaskGraph(object):
             
             Kwargs:
                 replacements (dict): A dictionary of string replacements used by tasks.
+                temp_dir (str): Temp directory to use as each tasks temp_dir.
         """
+
         self._graph = networkx.DiGraph()
         self._settings = utils.settings
         self._tasks = {}
         self.name = name
         self.replacements = replacements or {}
+        self.temp_dir = temp_dir
 
     def add_task(self, task):
         """ Adds a task to the task dictionary, and to the graph network.
@@ -83,7 +86,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self, export_type="PythonScript", deadline=False):
+    def export_tasks(self, export_type="PythonScript", temp_dir=None):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -91,12 +94,25 @@ class TaskGraph(object):
             allow each task to store a copy of its own task graph only containing 
             all its dependents, and then each task can be responsible for exporting 
             its own dependents during execution?
+
+            KwArgs:
+                export_type (str): Either "PythonScript" or "CommandLine" and dictates 
+                    the format that the Tasks get exported to.
+                temp_dir (str): Path to use for temp files. Will default to the 
+                    following values in order.
+                    1) Value passed in to this argument
+                    2) Value originally passed into the task graph.
+                    3) Value pointed to by any of the temp dir environment 
+                        variables as dictated by tempfile.mkdtemp()
+                deadline (bool): Whether or not to submit
         """
 
         exported_tasks = {}
 
-        tempdir = tempfile.mkdtemp()
-        logging.info("TEMPDIR: " + tempdir)
+        temp_dir = temp_dir or self.temp_dir
+        if temp_dir is None:
+            temp_dir = tempfile.mkdtemp()
+        logging.info("TEMPDIR: " + temp_dir)
 
         # Create a copy of the tasks dictionary.
         tasks = copy.copy(self._tasks)
@@ -105,11 +121,11 @@ class TaskGraph(object):
             # Export scripts for task.
             exported = task.export(
                 export_type=export_type, 
-                temp_dir=tempdir, 
+                temp_dir=temp_dir, 
                 job_name=self.name
             )
 
-            # If the task export returns a list, that mean it was a task which 
+            # If the task export returns a list, that means it was a task which 
             # expanded into multiple other tasks. We need to add these new tasks 
             # to the task_graph.
             if isinstance(exported, list):
@@ -128,16 +144,21 @@ class TaskGraph(object):
 
         return exported_tasks
 
-    def execute_local(self):
+    def execute_local(
+        self, 
+        temp_dir=None,
+        export_type="CommandLine",
+    ):
 
-        exported_tasks = self.export_tasks(export_type="CommandLine")
+        exported_tasks = self.export_tasks(export_type=export_type, temp_dir=temp_dir)
 
         results = {}
         taskExecutionOrder = networkx.topological_sort(self._graph)
         for task_name in taskExecutionOrder:
             task = exported_tasks.get(task_name)
             if task is None:
-                logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % task_name)
+                logging.debug("Skipping Task '%s' because it was added as a "
+                    "dependency, but was never added to the TaskGraph." % task_name)
                 continue
 
             ready = True
@@ -181,7 +202,23 @@ class TaskGraph(object):
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
-    def execute_deadline(self, batch_name=None, inherit_environment=True):
+    def execute_deadline(
+        self, 
+        batch_name=None, 
+        inherit_environment=True, 
+        temp_dir=None, 
+        export_type="CommandLine"
+    ):
+        """ Executes a task graph on deadline. 
+
+            Kwargs:
+                batch_name (str): The batch name of the job on deadline.
+                inherit_environment (bool): Passes the current environment on to 
+                    the deadline job if true.
+                temp_dir (str): Temp directory to use as each tasks temp_dir.
+                export_type (str): The export format for tasks to use.
+        """
+
         import Deadline.DeadlineConnect as Connect
         deadline = Connect.DeadlineCon(
             self._settings["deadline"]["host_name"],
@@ -217,11 +254,15 @@ class TaskGraph(object):
             }
 
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
-            print("Job: {}".format(job))
+            print("Job: {} - {}".format(job["Name"], job["_id"]))
             return job
 
 
-        exported_tasks = self.export_tasks(export_type="CommandLine", deadline=True)
+        exported_tasks = self.export_tasks(
+            export_type=export_type, 
+            deadline=True, 
+            temp_dir=temp_dir
+        )
         deadline_jobs = {}
 
         results = {}

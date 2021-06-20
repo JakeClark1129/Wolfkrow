@@ -1,3 +1,6 @@
+executables:
+  wolfkrow_run_task: "wolfkrow_run_task" # Path to the wolfkrow_run_task executable.
+
 task_attribute_defaults:
   NukeRender:
     executable: "nuke"
