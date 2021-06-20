@@ -1,3 +1,5 @@
+
+import ast
 import collections
 import copy
 import datetime
@@ -77,19 +79,81 @@ class TaskAttribute(object):
             Note: This method will first check that the type of the value matches 
                 the type that this TaskAttribute instance is expecting, or that 
                 the value set is one of options.
+            
+            Note: Since it is common for values parsed from a configuration file 
+                to be read as a string, we will first try to convert the type of 
+                the argument to the correct type before dismissing it as the 
+                incorrect type.
         """
 
         if value is None:
             return
 
+        # Make sure that the attribute value is acceptable
+
+        # If there is options, make sure the value is one of them.
         if self.attribute_options is not None:
             if value not in self.attribute_options:
-                raise TypeError("Invalid value %r received. Expected one of %s" % (value, self.attribute_options))
+                # Need to make some extra effort to be certain that it is not actually there...
+                passed = False
+                for option in self.attribute_options:
+                    try:
+                        # Attempt to convert to the type of the option, then check value.
+                        converted_value = self._convert_to_type(value, type(option))
+                        if converted_value == option:
+                            passed = True
+                            value = converted_value
+                            break
+                    except ValueError:
+                        pass
+                if not passed:
+                    raise ValueError("Invalid value '%s' received. Expected one of %s" % (value, self.attribute_options))
+
+        # Check to make sure that the value is the correct type
         if self.attribute_type is not None:
-            if not isinstance(value, self.attribute_type):
-                raise TypeError("Invalid type '%s' received. Expected %s" % (type(value), self.attribute_type))
+            # Need to make some extra effort to be certain that it does not match...
+            value = self._convert_to_type(value, self.attribute_type)
 
         self.data[instance] = value
+
+    def _convert_to_type(self, value, attribute_type):
+        """ Utility function to attempt to convert an object to a specific type.
+
+            Note: Only tested to work with the standard python types.
+
+            Args:
+                value (object): A python object to attempt to convert to type
+                attribute_type (Type): A type to try and convert to.
+
+            Returns:
+                Object converted to the desired type.
+            
+            Raises:
+                TypeError: If unable to convert to the specified type.
+        """
+        if isinstance(value, attribute_type):
+            # Already the correct type.
+            pass
+        elif (isinstance(value, basestring) and 
+            not issubclass(attribute_type, basestring)):
+            try:
+                # Attempt to convert the value to the correct type.
+                converted_value = ast.literal_eval(value)
+                if type(converted_value) == attribute_type:
+                    value = converted_value
+            except SyntaxError:
+                raise TypeError("Invalid type received. '%s' received, and could not be parsed to: %s" % (value, attribute_type))
+            except ValueError:
+                raise ValueError("Value '%s' could not be parsed." % value)
+        else:
+            # Literal eval does not work on string based classes so do a regular cast conversion for strings.
+            try:
+                # Attempt to convert the value to the correct type.
+                value = attribute_type(value)
+            except TypeError:
+                raise TypeError("Invalid type '%s' received. Expected %s" % (type(value), attribute_type))
+
+        return value
 
 class TaskType(type):
 
@@ -100,6 +164,7 @@ class TaskType(type):
         # we can access them later in the workflow designer. They need to be kept 
         # in order because the workflow designer should display the TaskAttributes 
         # in the order that they are added to the class.
+        # Note: Turns out that this is a wrong assumption. Values do not appear in __dict__ in the same order that they are added to the class. (I Think this is a python 2.7 vs 3.x difference). (OR maybe it is a "six" thing?)
         classObj.task_attributes = collections.OrderedDict()
         for cl in reversed(classObj.__mro__[:-1]):
             for name, attr in cl.__dict__.items():
@@ -113,7 +178,7 @@ class TaskType(type):
 
         return classObj
 
-@six.add_metaclass(TaskType)
+
 class Task():
     """ Base Object used for every task. The TaskGraph will be used to build 
         graph of tasks from configuration, which will later be executed as a 
@@ -137,6 +202,8 @@ class Task():
             Run -- Called immediately after the Setup method is called.
     """
 
+    __metaclass__ = TaskType
+
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
@@ -147,12 +214,14 @@ class Task():
         description="""List of config files used to reconstruct the Loader object 
 on the farm."""
     )
-    config = TaskAttribute(configurable=False, serialize=False)
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
 
-    executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    
+    python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+    command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
 
     def __init__(self, **kwargs):
         """ Initializes Task object
@@ -169,12 +238,18 @@ on the farm."""
             attribute = self.task_attributes.get(arg)
             if attribute is not None:
                 self.__setattr__(arg, kwargs[arg])
-        
-        if self.executable is None:
-            self.executable = os.environ.get("WOLFKROW_DEFAULT_TASK_EXECUTABLE")
 
-        if self.executable_args is None:
-            self.executable_args = os.environ.get("WOLFKROW_DEFAULT_TASK_EXECUTABLE_ARGS")
+        if self.python_script_executable is None:
+            self.python_script_executable = os.environ.get("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE")
+
+        if self.python_script_executable_args is None:
+            self.python_script_executable_args = os.environ.get("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE_ARGS")
+
+        if self.command_line_executable is None:
+            self.command_line_executable = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE")
+        
+        if self.command_line_executable_args is None:
+            self.command_line_executable_args = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE_ARGS")
 
     def copy(self):
         """ Creates a copy of itself.
@@ -214,8 +289,7 @@ on the farm."""
 
             Validation happens as the first step of the export process.
         """
-        if self.executable is None:
-            raise TaskException("WOLFKROW_DEFAULT_TASK_EXECUTABLE variable undefined and no executable specified.")
+        pass
 
     def setup(self):
         """ Abstract method for doing initial tasks required for the run method to 
@@ -239,24 +313,43 @@ on the farm."""
     def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in order to 
             re-construct and run this task via command line. 
+
+            Args:
+                temp_dir (str): temp directory to write the stand alone python script to.
+                deadline (bool): whether or not to prepare this task for deadline.
         """
+
+        if self.command_line_executable is None:
+            raise TaskException("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE variable undefined and no executable specified.")
 
         if not self.temp_dir:
             self.temp_dir = temp_dir
 
         arg_str = ""
-        for attribute_name, attribute_obj  in self.task_attributes.items():
-            if attribute_obj.serialize:
-                arg_str = "{arg_str} --{attribute_name} {value}".format(
-                        arg_str=arg_str,
-                        attribute_name=attribute_name,
-                        value=repr(attribute_obj.__get__(self)
-                    )
-                )
 
-        executable = self.config['executables'].get("wolfkrow_run_task", "wolfkrow_run_task.py")
-        command = "{executable} --task_name {task_type} {task_args}".format(
-            executable = executable,
+        for attribute_name, attribute_obj  in self.task_attributes.items():
+            if attribute_obj.serialize is False:
+                continue
+
+            value = attribute_obj.__get__(self)
+            if value is None or value == attribute_obj.default_value:
+                continue
+
+            # Ensure that these types are wrapped in quotes so they are interpreted 
+            # as a single argument.
+            if type(value) in [list, set, dict]:
+                value = repr(value)
+
+            arg_str = "{arg_str} --{attribute_name} {value}".format(
+                arg_str=arg_str,
+                attribute_name=attribute_name,
+                value=repr(value)
+            )
+
+
+        command = "{executable} {executable_args} --task_name {task_type} {task_args}".format(
+            executable=self.command_line_executable, 
+            executable_args= self.command_line_executable_args or "",
             task_type=self.__class__.__name__, 
             task_args=arg_str
         )
@@ -280,6 +373,9 @@ on the farm."""
             returns:
                 (str) - The file path to the exported task.
         """
+
+        if self.python_script_executable is None:
+            raise TaskException("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE variable undefined and no executable specified.")
 
         def sub_space_for_underscore(string):
             return string.strip().replace(" ", "_")
@@ -361,7 +457,7 @@ sys.exit(ret)""".format(
         return str(rep)
 
     @classmethod
-    def from_dict(cls, data_dict, replacements=None, config_files=None, temp_dir=None):
+    def from_dict(cls, data_dict, replacements=None, config_files=None, sgtk=None, temp_dir=None):
         """ Generic implementation of the 'from_dict' method for converting a dictionary
             containing the data for a Task object into a Task object. For more control
             over the conversion process, please override this method on your custom 
@@ -382,7 +478,7 @@ sys.exit(ret)""".format(
         filtered_data_dict = {}
         # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
         if replacements:
-            utils.replace_replacements_dict_crawler(data_dict, replacements)
+            utils.replace_replacements_dict_crawler(data_dict, replacements, sgtk=sgtk)
         else:
             #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
             pass

@@ -6,6 +6,17 @@ import sys
 from wolfkrow.core.tasks import all_tasks
 
 def parse_args():
+    """ Parses the args passed into run_task.
+
+        Expects --task_name to be provided, and then an arbitrary about of follow 
+        up arguments matching the form "--key value". Uses the additional arguments 
+        to construct a dictionary which is later used to instantiate a Task Object.
+
+        Returns:
+            args, task_args: Namespace containing the expected arguments, then a 
+                dictionary of all the additional arguments.
+    """
+
     parser = argparse.ArgumentParser(prog='wolfkrow_run_task')
     parser.add_argument('--task_name', help="Class name of the task to run.")
     known, unknown = parser.parse_known_args()

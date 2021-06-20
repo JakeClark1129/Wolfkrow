@@ -76,6 +76,12 @@ class TaskGraph(object):
         for task in tasks:
             self.add_task(task)
 
+    def add_dependency(self, task, dependency):
+        """ Adds an additional dependency to a task already in the task graph.
+        """
+        task.dependencies.append(dependency)
+        self._graph.add_edge(dependency, task.name)
+
     def validate_task_graph(self):
         """ Validates the current Task graph.
 
@@ -95,7 +101,7 @@ class TaskGraph(object):
             all its dependents, and then each task can be responsible for exporting 
             its own dependents during execution?
 
-            KwArgs:
+            Kwargs:
                 export_type (str): Either "PythonScript" or "CommandLine" and dictates 
                     the format that the Tasks get exported to.
                 temp_dir (str): Path to use for temp files. Will default to the 
@@ -132,13 +138,30 @@ class TaskGraph(object):
             if isinstance(exported, list):
                 for exported_task in exported:
                     self.add_task(exported_task[0])
+                # Search the task graph for tasks which dependend on the original 
+                # task, and update them to depend on the new tasks.
+                for task2 in self._tasks.values():
+                    if task.name in task2.dependencies:
+                        for exported_task in exported:
+                            self.add_dependency(task2, exported_task[0].name)
             else:
                 exported = [exported]
 
             for exported_task in exported:
-                exported_tasks[exported_task[0].name] = {
-                    "executable": task.executable,
-                    "executable_args": task.executable_args,
+                if export_type == "CommandLine":
+                    command_bits = exported_task[1].split()
+                    executable = command_bits[0]
+                    args = command_bits[1:]
+                    exported_tasks[exported_task[0].name] = {
+                        "executable": executable,
+                        "executable_args": args,
+                        "script": None,
+                        "obj": exported_task[0],
+                    }
+                elif export_type == "PythonScript":
+                    exported_tasks[exported_task[0].name] = {
+                    "executable": task.python_script_executable,
+                    "executable_args": task.python_script_executable_args,
                     "script": exported_task[1],
                     "obj": exported_task[0],
                 }
@@ -176,10 +199,10 @@ class TaskGraph(object):
             args = []
             args.append(task['executable'])
             if task['executable_args']:
-                executable_args = task['executable_args'].split(' ')
-                args.extend(executable_args)
-            script_args = filter(lambda x: bool(x), task['script'].split(' '))
-            args.append(script_args)
+                args.extend(task['executable_args'])
+            if task.get("script") and task['script'] is not None:
+                script_args = filter(lambda x: bool(x), task['script'].split(' '))
+                args.extend(script_args)
 
             #TODO: The python script being executed here can be a security liability 
             # since they can be modified between being written out, and being executed 
@@ -225,7 +248,7 @@ class TaskGraph(object):
             self._settings["deadline"]["host_name"],
             self._settings["deadline"]["port"])
 
-        def submit_task_to_deadline(task, deadline, dependencies, batch_name=None):
+        def submit_task_to_deadline(task, deadline, dependencies, batch_name=None, frames=None):
             dependencies_str = ",".join(dependencies)
             batch_name = batch_name or self.name
             job_attrs = {
@@ -237,6 +260,17 @@ class TaskGraph(object):
                 "Pool": "tech",
             }
 
+            # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
+            if (hasattr(task["obj"], "start_frame") and 
+                hasattr(task["obj"], "end_frame") and 
+                hasattr(task["obj"], "chunk_size")
+            ):
+                job_attrs['Frames'] = "{}-{}".format(task["obj"].start_frame, task["obj"].end_frame)
+                job_attrs['ChunkSize'] = task["obj"].chunk_size  
+                # Override chunk size to the total frame count if it is 0 or None
+                if task["obj"].chunk_size and task["obj"].chunk_size == 0:
+                    job_attrs['ChunkSize'] = task["obj"].end_frame - task["obj"].start_frame + 1
+
             # Add Environment variables.
             if inherit_environment:
                 var_index = 0
@@ -245,8 +279,10 @@ class TaskGraph(object):
                     var_index += 1
 
             if task['executable_args']:
-                arguments = " ".join(task['executable_args']) + " " + task['script']
-            else:
+                arguments = " ".join(task['executable_args'])
+                if task.get("script") is not None:
+                    arguments = arguments + " " + task['script']
+            elif task.get("script") is not None:
                 arguments = " " + task['script']
 
             plugin_attrs = {

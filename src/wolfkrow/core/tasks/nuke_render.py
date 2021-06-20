@@ -2,6 +2,7 @@
 """
 
 import errno
+import logging
 import os
 import shutil
 
@@ -18,7 +19,7 @@ class NukeRender(Task):
         Will create a Write node at the bottom of the node graph with the specified settings.
     """
 
-    scripts = TaskAttribute(default_value="", configurable=True, attribute_type=list, 
+    scripts = TaskAttribute(default_value=[], configurable=True, attribute_type=list, 
         description="list of nuke scripts to concatenate together. Python scripts will be executed.")
 
     # Attributes for read node
@@ -48,14 +49,15 @@ class NukeRender(Task):
     compression = TaskAttribute(default_value=None, attribute_type=int, description="""Which Compression to use when writing the file. This value is only used when 
 writing exr, sgi, targa, or tiff files. Each file type has its own options. See below:
     EXR:
-        0 - ZIP (1 scanlines)
-        1 - ZIP (16 scanlines)
-        2 - PIZ Wavelet (32 scanlines)
-        3 - RLE
-        4 - B44
-        5 - B44a
-        6 - DWAA
-        7 - DWAB
+        0 - none
+        1 - ZIP (1 scanlines)
+        2 - ZIP (16 scanlines)
+        3 - PIZ Wavelet (32 scanlines)
+        4 - RLE
+        5 - B44
+        6 - B44a
+        7 - DWAA
+        8 - DWAB
     
     SGI:
         0 - none
@@ -81,6 +83,12 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         attribute_type=int, 
         description="The increments to use when rendering. Ex: 10 will render every 10th frame."
     )
+    additional_read_node_properties = TaskAttribute(
+        default_value=None, 
+        configurable=True, 
+        attribute_type=dict, 
+        description="Dictionary containing key value pairs as 'knob_name': 'knob_value'"
+    )
     additional_write_node_properties = TaskAttribute(
         default_value=None, 
         configurable=True, 
@@ -94,7 +102,6 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             Kwargs:
         """
         super(NukeRender, self).__init__(**kwargs)
-        self.executable = "Nuke 12.2v2.lnk"
 
     def validate(self):
         """ Preforms Validation checks for NukeRender Task.
@@ -255,6 +262,30 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 current_bottom_node = self._append_nuke_script(script, current_bottom_node)
         return current_bottom_node
 
+    def set_node_knob_values_from_dict(self, node, value_dict):
+        """ Will iterate a given a dictionary of knob_name: value, and will assign 
+            each value found to the corresponding knob on the node.
+
+            Args:
+                node: The Node object of a nuke node.
+                value_dict (dict): Dictionary of knob names, and the value to set.
+        """
+
+        for key, value in value_dict.items():
+            if key in node.knobs():
+                failed = False
+                try:
+                    knob = node.knob(key)
+                    # Get the knob's data type, and attempt to cast value to that type.
+                    knob_value_type = type(knob.getValue())
+                    if knob_value_type != type(None):
+                        try:
+                            value = knob_value_type(value)
+                        except:
+                            pass
+                    knob.setValue(value)
+                except Exception as e:
+                    print("Failed to set knob '{}' to {!r}".format(key, value))
 
     def run(self):
         """ Performs the nuke render.
@@ -275,9 +306,14 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
         # Create Read node for self.source
         read_node = nuke.createNode("Read")
+        read_node.knob("raw").setValue(True)
         read_node.knob("file").setValue(self.source)
         read_node.knob("first").setValue(self.start_frame)
         read_node.knob("last").setValue(self.end_frame)
+
+        if self.additional_read_node_properties:
+            self.set_node_knob_values_from_dict(read_node, self.additional_read_node_properties)
+
         if top_node:
             top_node.setInput(0, read_node)
 
@@ -285,6 +321,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         write_node = nuke.createNode(self.write_node_class)
         write_node.knob("file").setValue(self.destination)
         write_node.knob("file_type").setValue(self.file_type)
+        write_node.knob("raw").setValue(True)
 
         if self.file_type in ["exr", "dpx", "png", "tiff", "sgi"]:
             write_node.knob("datatype").setValue(self.bit_depth)
@@ -297,9 +334,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
         # Set values for arbitrary knobs and values.
         if self.additional_write_node_properties:
-            for key, value in self.additional_write_node_properties.items():
-                if key in write_node.knobs():
-                    write_node.knob(key).setValue(value)
+            self.set_node_knob_values_from_dict(write_node, self.additional_write_node_properties)
 
         # If there is no bottom node, set the read node as the bottom_node
         if not bottom_node:
@@ -312,6 +347,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             root_dir=self.temp_dir,
             task_name=self.name,
         )
+        logging.info("Generated nuke script '{}'".format(script_path))
         nuke.scriptSaveAs(script_path, overwrite=1)
 
         # Execute the write node to kick off the render.
