@@ -147,6 +147,7 @@ class Task():
         description="""List of config files used to reconstruct the Loader object 
 on the farm."""
     )
+    config = TaskAttribute(configurable=False, serialize=False)
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
 
@@ -235,10 +236,13 @@ on the farm."""
         raise NotImplementedError("run method must be overridden by child class")
 
 
-    def export_to_command_line(self, deadline=False):
+    def export_to_command_line(self, temp_dir=None, wolfkrow_run_task_executable=None):
         """ Will generate a `wolfkrow_run_task` command line command to run in order to 
             re-construct and run this task via command line. 
         """
+
+        if not self.temp_dir:
+            self.temp_dir = temp_dir
 
         arg_str = ""
         for attribute_name, attribute_obj  in self.task_attributes.items():
@@ -250,14 +254,16 @@ on the farm."""
                     )
                 )
 
-        command = "wolfkrow_run_task.py {task_type} {task_args}".format(
+        executable = self.config['executables'].get("wolfkrow_run_task", "wolfkrow_run_task.py")
+        command = "{executable} --task_name {task_type} {task_args}".format(
+            executable = executable,
             task_type=self.__class__.__name__, 
             task_args=arg_str
         )
 
         return (self, command)
 
-    def export_to_python_script(self, temp_dir, job_name):
+    def export_to_python_script(self, job_name, temp_dir=None):
         """ Will Export this task into a stand alone python script in order to run this task later. 
             
             Note: This a fairly generic implementation that takes advantage of 
@@ -266,8 +272,10 @@ on the farm."""
                 to execute this task.
 
             Args:
-                temp_dir (str): temp directory to write the stand alone python script to.
                 job_name (str): name of the job this task is a part of. Only used in generation of the scripts name.
+
+            Kwargs:
+                temp_dir (str): temp directory to write the stand alone python script to.
 
             returns:
                 (str) - The file path to the exported task.
@@ -282,8 +290,14 @@ on the farm."""
             job_name=sub_space_for_underscore(job_name),
             task_name=sub_space_for_underscore(self.name)
         )
+
+        if self.temp_dir is None:
+            self.temp_dir = temp_dir
+
+        temp_dir = temp_dir or self.temp_dir
+
         file_path = os.path.join(temp_dir, script_name)
-        
+
         obj_str = repr(self)
         contents = """
 import sys
@@ -311,9 +325,9 @@ sys.exit(ret)""".format(
             
             Kwargs:
                 temp_dir (str): Passed onto the PythonScript export method. 
-                Used to choose where to write the python script to.
+                    Used to choose where to write the python script to.
                 job_name (str): Passed onto the PythonScript export method. 
-                Used to choose the name of the exported python script.
+                    Used to choose the name of the exported python script.
 
             returns:
                 (self, created_obj) - created_obj will either be a command line string to run OR the file path to a python script.
@@ -322,9 +336,9 @@ sys.exit(ret)""".format(
         self.validate()
 
         if export_type == "CommandLine":
-            return self.export_to_command_line()
+            return self.export_to_command_line(temp_dir=temp_dir)
         elif export_type == "PythonScript":
-            return self.export_to_python_script(temp_dir, job_name)
+            return self.export_to_python_script(job_name, temp_dir=temp_dir)
 
 
     def __repr__(self):
@@ -347,7 +361,7 @@ sys.exit(ret)""".format(
         return str(rep)
 
     @classmethod
-    def from_dict(cls, data_dict, replacements=None, config_files=None):
+    def from_dict(cls, data_dict, replacements=None, config_files=None, temp_dir=None):
         """ Generic implementation of the 'from_dict' method for converting a dictionary
             containing the data for a Task object into a Task object. For more control
             over the conversion process, please override this method on your custom 
@@ -376,8 +390,11 @@ sys.exit(ret)""".format(
         for key, value in data_dict.items():
             if value is not None:
                 filtered_data_dict[key] = value
-        
+
         filtered_data_dict["config_files"] = config_files
+
+        if temp_dir and "temp_dir" not in filtered_data_dict:
+            filtered_data_dict["temp_dir"] = temp_dir
 
         obj = cls(**filtered_data_dict)
         return obj
