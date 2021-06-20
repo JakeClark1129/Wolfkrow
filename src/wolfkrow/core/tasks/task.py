@@ -236,7 +236,7 @@ on the farm."""
         raise NotImplementedError("run method must be overridden by child class")
 
 
-    def export_to_command_line(self, temp_dir=None, wolfkrow_run_task_executable=None):
+    def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in order to 
             re-construct and run this task via command line. 
         """
@@ -314,7 +314,7 @@ sys.exit(ret)""".format(
             handle.write(contents)
         return (self, file_path)
 
-    def export(self, export_type, temp_dir=None, job_name=None):
+    def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
             synchronous execution of many tasks among many machines. Intended 
             to be used alongside a distributed render manager (Something like 
@@ -336,7 +336,7 @@ sys.exit(ret)""".format(
         self.validate()
 
         if export_type == "CommandLine":
-            return self.export_to_command_line(temp_dir=temp_dir)
+            return self.export_to_command_line(temp_dir=temp_dir, deadline=deadline)
         elif export_type == "PythonScript":
             return self.export_to_python_script(job_name, temp_dir=temp_dir)
 

@@ -86,7 +86,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self, export_type="PythonScript", temp_dir=None):
+    def export_tasks(self, export_type="PythonScript", temp_dir=None, deadline=False):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -122,7 +122,8 @@ class TaskGraph(object):
             exported = task.export(
                 export_type=export_type, 
                 temp_dir=temp_dir, 
-                job_name=self.name
+                job_name=self.name,
+                deadline=deadline,
             )
 
             # If the task export returns a list, that means it was a task which 
@@ -260,12 +261,11 @@ class TaskGraph(object):
 
         exported_tasks = self.export_tasks(
             export_type=export_type, 
+            temp_dir=temp_dir, 
             deadline=True, 
-            temp_dir=temp_dir
         )
         deadline_jobs = {}
 
-        results = {}
         taskExecutionOrder = networkx.topological_sort(self._graph)
         for task_name in taskExecutionOrder:
             task = exported_tasks.get(task_name)
