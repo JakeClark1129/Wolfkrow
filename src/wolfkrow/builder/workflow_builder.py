@@ -94,7 +94,7 @@ class Loader(object):
             else:
                 current_dict["task_attribute_defaults"].update(task_attribute_defaults)
 
-        executables = new_dict.get(task_attribute_defaults)
+        executables = new_dict.get("executables")
         if executables:
             if "executables" not in current_dict:
                 current_dict["executables"] = executables
