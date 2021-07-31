@@ -354,7 +354,7 @@ on the farm."""
             task_args=arg_str
         )
 
-        return (self, command)
+        return [(self, command)]
 
     def export_to_python_script(self, job_name, temp_dir=None):
         """ Will Export this task into a stand alone python script in order to run this task later. 
@@ -408,7 +408,7 @@ sys.exit(ret)""".format(
 
         with open(file_path, 'w') as handle:
             handle.write(contents)
-        return (self, file_path)
+        return [(self, file_path)]
 
     def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
@@ -431,11 +431,42 @@ sys.exit(ret)""".format(
 
         self.validate()
 
-        if export_type == "CommandLine":
-            return self.export_to_command_line(temp_dir=temp_dir, deadline=deadline)
-        elif export_type == "PythonScript":
-            return self.export_to_python_script(job_name, temp_dir=temp_dir)
+        exported_tasks = []
 
+        if export_type == "CommandLine":
+            exported_tasks.extend(self.export_to_command_line(temp_dir=temp_dir, deadline=deadline))
+        elif export_type == "PythonScript":
+            exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=temp_dir))
+
+        sub_tasks = self.export_subtasks(
+            export_type, 
+            temp_dir=temp_dir, 
+            job_name=job_name, 
+            deadline=deadline
+        )
+        exported_tasks.extend(sub_tasks)
+        return exported_tasks
+
+    def export_subtasks(self, export_type, temp_dir=None, job_name=None, deadline=False):
+        exported_subtasks = []
+        subtasks = self.get_subtasks()
+
+        #TODO: If job_name is passed in, we need to modify it for each subtask so 
+        #   that each job still has a unique name.
+
+        for subtask in subtasks:
+            exported_subtasks.extend(subtask.export())
+
+        return exported_subtasks
+
+    def get_subtasks(self):
+        """ Gives each Task object the opportunity add additional tasks to the task_graph 
+            before submission.
+
+            Default implemention returns an empty list.
+        """
+
+        return []
 
     def __repr__(self):
         """ Official string representation of self.

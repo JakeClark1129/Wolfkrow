@@ -145,7 +145,7 @@ class SequenceTask(Task):
             task_args=arg_str
         )
 
-        return (self, command)
+        return [(self, command)]
 
     def export_to_python_script(self, job_name, temp_dir=None):
         """ Will Export this task into a stand alone python script to allow for synchronous 
