@@ -217,7 +217,6 @@ on the farm."""
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
 
-    
     python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
@@ -506,14 +505,19 @@ sys.exit(ret)""".format(
                     files which constructed this task.
         """
 
-        filtered_data_dict = {}
-        # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
+        # Ensure that temp_dir is added so that the task can be configured with 
+        # a {temp_dir} replacement
+        if temp_dir and "temp_dir" not in replacements:
+            replacements["temp_dir"] = temp_dir
+
         if replacements:
             utils.replace_replacements_dict_crawler(data_dict, replacements, sgtk=sgtk)
         else:
             #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
             pass
 
+        # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
+        filtered_data_dict = {}
         for key, value in data_dict.items():
             if value is not None:
                 filtered_data_dict[key] = value

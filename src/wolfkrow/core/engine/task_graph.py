@@ -67,8 +67,10 @@ class TaskGraph(object):
 
         self._graph.add_node(task.name)
 
-        # Edges are added such that when the task graph is built it goes from "depended on task => dependent task". This results in the most 
-        # depended on tasks being at the top of the tree when sorting Topologically. which will result in the correct order of task execution
+        # Edges are added such that when the task graph is built it goes from 
+        # "depended on task => dependent task". This results in the most 
+        # depended on tasks being at the top of the tree when sorting Topologically. 
+        # which will result in the correct order of task execution
         edges = [(dependency, task.name) for dependency in task.dependencies]
         self._graph.add_edges_from(edges)
 
@@ -226,6 +228,38 @@ class TaskGraph(object):
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
+    def get_job_attrs_for_tasktype(self, task_type):
+        """ Reads the settings file to get the default Group, Limits, and Pool 
+            for each deadline job, and then also does a lookup to see if there
+            is any overrides defined for the task_type requested.
+
+            Args:
+                task_type (str): Name of the type of task. Ex: NukeRender
+            
+            Returns:
+                Dict: Dictionary containing Group, Limits, and Pool. Intended for 
+                    use when submitting a Task to Deadline.
+        """
+
+        job_attrs = {
+            "Group": self._settings["deadline"]["default_group"],
+            "Limits": self._settings["deadline"]["default_limits"],
+            "Pool": self._settings["deadline"]["default_pool"],
+        }
+
+        # Now look up any task_type specific overrides
+        overrides = self._settings["deadline"].get("task_overrides", {})
+        task_overrides = overrides.get(task_type)
+        if task_overrides:
+            if "group" in task_overrides:
+                job_attrs["Group"] = task_overrides["group"]
+            if "limit" in task_overrides:
+                job_attrs["Limits"] = task_overrides["limits"]
+            if "pool" in task_overrides:
+                job_attrs["Pool"] = task_overrides["pool"]
+
+        return job_attrs 
+
     def execute_deadline(
         self, 
         batch_name=None, 
@@ -257,8 +291,10 @@ class TaskGraph(object):
                 "UserName": os.environ.get("USER"),
                 "Plugin": "CommandLine",
                 "JobDependencies": dependencies_str,
-                "Pool": "tech",
             }
+
+            task_job_attrs = self.get_job_attrs_for_tasktype(self.__class__.__name__)
+            job_attrs.update(task_job_attrs)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
             if (hasattr(task["obj"], "start_frame") and 
