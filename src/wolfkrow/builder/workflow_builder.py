@@ -162,7 +162,7 @@ class Loader(object):
         return tasks_list
 
     def get_default_task_data(self, task_name):
-        if task_name in self.config['task_attribute_defaults']:
+        if task_name in self.config.get('task_attribute_defaults', []):
             return self.config['task_attribute_defaults'][task_name]
         return {}
 
@@ -174,7 +174,7 @@ class Loader(object):
             temp_dir=self.temp_dir,
         )
         workflow_tasks = self.config['workflows'].get(workflow_name)
-        
+
         if workflow_tasks is None:
             raise Exception("Unable to find workflow '{}'".format(workflow_name))
 

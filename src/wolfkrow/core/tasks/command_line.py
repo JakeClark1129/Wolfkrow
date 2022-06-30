@@ -50,4 +50,4 @@ class CommandLine(Task):
             script_args=arg_str
         )
 
-        return (self, command)
+        return [(self, command)]
