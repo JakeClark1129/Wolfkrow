@@ -165,3 +165,18 @@ class FileOperation(Task):
 
     def operate(self, source, destination=None):
         raise NotImplementedError("operate method not implemented")
+
+    
+    def set_permission(self, file_path, permission):
+        """
+        Function for setting the file permission
+
+        Args:
+            file_path(str): the path of the file
+            permission(int): the permission we want to set to
+        """
+        try:
+            os.chmod(file_path, permission)
+        except OSError as ex:
+            if ex.errno == errno.EPERM:
+                print("Warning: You don't have chmod permission on : %s" % file_path)

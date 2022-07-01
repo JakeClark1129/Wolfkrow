@@ -23,6 +23,9 @@ class Link(FileOperation):
     overwrite = TaskAttribute(default_value=False, attribute_type=bool, 
         description="Whether or not to overwrite a link which already exists.")
 
+    source_permission = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    destination_permission = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+
     def validate(self):
         """ Preforms Validation checks for the Link Task. Will check to make sure 
             that the source file is not a directory for hardlinking.
@@ -56,3 +59,11 @@ class Link(FileOperation):
             os.symlink(source, destination)
         elif self.link_type == "hardlink":
             os.link(source, destination)
+
+        if self.source_permission:
+            self.set_permission(source, self.source_permission)
+
+        if self.destination_permission:
+            self.set_permission(destination, self.destination_permission)
+
+            
