@@ -499,6 +499,9 @@ sys.exit(ret)""".format(
 
         return []
 
+    def update_replacements(self, new_replacements):
+        pass
+
     def __repr__(self):
         """ Official string representation of self.
 

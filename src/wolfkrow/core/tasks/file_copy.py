@@ -18,5 +18,14 @@ class FileCopy(FileOperation):
             a trailing slash OR ensure the directory exists ahead of time.
     """
 
+    source_permission = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    destination_permission = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+
     def operate(self, source, destination):
         shutil.copy2(source, destination)
+
+        if self.source_permission:
+            self.set_permission(source, self.source_permission)
+
+        if self.destination_permission:
+            self.set_permission(destination, self.destination_permission)
