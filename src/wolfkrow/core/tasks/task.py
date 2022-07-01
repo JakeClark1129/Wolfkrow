@@ -64,7 +64,20 @@ class TaskAttribute(object):
         """
 
         if instance is not None:
-            return self.data.get(instance, self.default_value)
+            # default_value is initialized once when a tasks module is imported. 
+            # If default_value is a mutable type (list, dict, etc...), then all 
+            # instances of the task will share the same object, meaning that an 
+            # update to the value of the TaskAttribute will update all instances
+            # of the same Task type.
+            # Create a deepcopy of the default value so we always get a unique 
+            # object
+            data = self.data.get(instance)
+            if data is None:
+                data = copy.deepcopy(self.default_value)
+                # Also assign it so the next time we retrieve this object, we get 
+                # our copy, rather than a new fresh copy.
+                self.data[instance] = data
+            return data
         else:
             # If we get this attribute from the class level, then we return the 
             # descriptor object instead of an object level value, This allows us 
@@ -179,7 +192,7 @@ class TaskType(type):
         return classObj
 
 
-class Task():
+class Task(object):
     """ Base Object used for every task. The TaskGraph will be used to build 
         graph of tasks from configuration, which will later be executed as a 
         series of tasks to complete a job.
@@ -217,7 +230,6 @@ on the farm."""
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
 
-    
     python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
@@ -337,7 +349,10 @@ on the farm."""
 
             # Ensure that these types are wrapped in quotes so they are interpreted 
             # as a single argument.
-            if type(value) in [list, set, dict]:
+            if (isinstance(value, dict) or
+                isinstance(value, list) or
+                isinstance(value, set)):
+
                 value = repr(value)
 
             arg_str = "{arg_str} --{attribute_name} {value}".format(
@@ -354,7 +369,7 @@ on the farm."""
             task_args=arg_str
         )
 
-        return (self, command)
+        return [(self, command)]
 
     def export_to_python_script(self, job_name, temp_dir=None):
         """ Will Export this task into a stand alone python script in order to run this task later. 
@@ -408,7 +423,7 @@ sys.exit(ret)""".format(
 
         with open(file_path, 'w') as handle:
             handle.write(contents)
-        return (self, file_path)
+        return [(self, file_path)]
 
     def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
@@ -431,11 +446,58 @@ sys.exit(ret)""".format(
 
         self.validate()
 
-        if export_type == "CommandLine":
-            return self.export_to_command_line(temp_dir=temp_dir, deadline=deadline)
-        elif export_type == "PythonScript":
-            return self.export_to_python_script(job_name, temp_dir=temp_dir)
+        # Assign the temp_dir variable so that the tempdir is available after submission.
+        if self.temp_dir is None:
+            self.temp_dir = temp_dir
 
+        exported_tasks = []
+
+        # Export the sub tasks
+        # Note: The sub_tasks are exported first incase exporting the subtasks 
+        # changes any attributes in the parent task.
+        sub_tasks = self.export_subtasks(
+            export_type, 
+            temp_dir=temp_dir, 
+            job_name=job_name, 
+            deadline=deadline
+        )
+
+        # Export the parent task.
+        if export_type == "CommandLine":
+            exported_tasks.extend(self.export_to_command_line(temp_dir=temp_dir, deadline=deadline))
+        elif export_type == "PythonScript":
+            exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=temp_dir))
+
+        # Add the sub tasks to the exported tasks list.
+        exported_tasks.extend(sub_tasks)
+        return exported_tasks
+
+    def export_subtasks(self, export_type, temp_dir=None, job_name=None, deadline=False):
+        exported_subtasks = []
+        subtasks = self.get_subtasks()
+
+        #TODO: If job_name is passed in, we need to modify it for each subtask so 
+        #   that each job still has a unique name.
+
+        for subtask in subtasks:
+            exported_subtasks.extend(subtask.export(
+                    export_type,
+                    temp_dir=temp_dir,
+                    #job_name=job_name,
+                    deadline=deadline
+                )
+            )
+
+        return exported_subtasks
+
+    def get_subtasks(self):
+        """ Gives each Task object the opportunity add additional tasks to the task_graph 
+            before submission.
+
+            Default implemention returns an empty list.
+        """
+
+        return []
 
     def __repr__(self):
         """ Official string representation of self.
@@ -475,19 +537,27 @@ sys.exit(ret)""".format(
                     files which constructed this task.
         """
 
-        filtered_data_dict = {}
-        # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
+        # Ensure that temp_dir is added so that the task can be configured with 
+        # a {temp_dir} replacement
+        if temp_dir and "temp_dir" not in replacements:
+            replacements["temp_dir"] = temp_dir
+
         if replacements:
             utils.replace_replacements_dict_crawler(data_dict, replacements, sgtk=sgtk)
         else:
             #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
             pass
 
+        # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
+        filtered_data_dict = {}
         for key, value in data_dict.items():
             if value is not None:
                 filtered_data_dict[key] = value
 
         filtered_data_dict["config_files"] = config_files
+
+        if "replacements" not in filtered_data_dict:
+            filtered_data_dict["replacements"] = replacements
 
         if temp_dir and "temp_dir" not in filtered_data_dict:
             filtered_data_dict["temp_dir"] = temp_dir

@@ -36,7 +36,7 @@ class CommandLine(Task):
     script = TaskAttribute(required=True, description="The Command to run on the command line.")
     args = TaskAttribute(required=True, attribute_type=list, description="The arguments to the command. Must be supplied as a list.")
 
-    def export_to_command_line(self, deadline=False):
+    def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Overwrites the default behavior of this this method to just recreate 
             the command line script to run from the script and args attributes.
 

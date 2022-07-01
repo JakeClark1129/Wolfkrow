@@ -42,4 +42,5 @@ if __name__ == '__main__':
     task = task_class.from_dict(task_args)
     
     # Execute the Task Object.
-    task()
+    ret = task()
+    sys.exit(ret)

@@ -56,54 +56,6 @@ class SequenceTask(Task):
                 )
             )
 
-
-    def __call__(self):
-        """ Validates, sets up, then calls run for each frame in frame range.
-
-            Returns:
-                True: If successfully completed
-                False: If unsuccessfully completed
-
-            Raises:
-                TaskValidationException: Invalid task configuration.
-        """
-
-        self.setup()
-        try: 
-            failed_frames = []
-            success = 0
-            for frame in range(self.start_frame, self.end_frame + 1):
-                result = self.run(frame)
-                if result != 0:
-                    success = 1
-                    failed_frames.append(frame)
-        except Exception as e:
-            traceback.print_exc()
-            logging.error("Run method for task '%s' Failed. Reason: %s" % (self.name, e))
-            return 1
-
-        if success != 0:
-            logging.error("Run method for task '{name}' Failed for frames: {failed_frames}.".format(
-                    name=self.name, 
-                    failed_frames=failed_frames
-                )
-            )
-
-        return success
-
-    def run(self, frame):
-        """ Abstract method for the work that should be done by this Task Object.
-
-            Args:
-                frame (int): Current frame to execute the task for.
-
-            Returns:
-                True: If successfully completed
-                False: If unsuccessfully completed
-        """
-
-        raise NotImplementedError("run method must be overridden by child class")
-
     def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in order to 
             re-construct and run this task via command line. 
@@ -129,7 +81,10 @@ class SequenceTask(Task):
 
             # These types can have spaces in the "repr" output, so convert them 
             # to strings so that they are wrapped in quotes on the command line.
-            if type(value) in [list, set, dict]:
+            if (isinstance(value, dict) or
+                isinstance(value, list) or
+                isinstance(value, set)):
+
                 value = repr(value)
 
             arg_str = "{arg_str} --{attribute_name} {value}".format(

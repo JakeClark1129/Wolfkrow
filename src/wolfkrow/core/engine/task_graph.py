@@ -67,8 +67,10 @@ class TaskGraph(object):
 
         self._graph.add_node(task.name)
 
-        # Edges are added such that when the task graph is built it goes from "depended on task => dependent task". This results in the most 
-        # depended on tasks being at the top of the tree when sorting Topologically. which will result in the correct order of task execution
+        # Edges are added such that when the task graph is built it goes from 
+        # "depended on task => dependent task". This results in the most 
+        # depended on tasks being at the top of the tree when sorting Topologically. 
+        # which will result in the correct order of task execution
         edges = [(dependency, task.name) for dependency in task.dependencies]
         self._graph.add_edges_from(edges)
 
@@ -132,20 +134,44 @@ class TaskGraph(object):
                 deadline=deadline,
             )
 
-            # If the task export returns a list, that means it was a task which 
-            # expanded into multiple other tasks. We need to add these new tasks 
-            # to the task_graph.
-            if isinstance(exported, list):
-                for exported_task in exported:
+            # This is no longer true. We need a special case to handle chunked jobs now.
+            # # If the task export returns a list, that means it was a task which 
+            # # expanded into multiple other tasks. We need to add these new tasks 
+            # # to the task_graph.
+            # if isinstance(exported, list):
+            #     for exported_task in exported:
+            #         self.add_task(exported_task[0])
+            #     # Search the task graph for tasks which dependend on the original 
+            #     # task, and update them to depend on the new tasks.
+            #     for task2 in self._tasks.values():
+            #         if task.name in task2.dependencies:
+            #             for exported_task in exported:
+            #                 self.add_dependency(task2, exported_task[0].name)
+            # else:
+            #     exported = [exported]
+
+            exported_task_names = [export[0].name for export in exported]
+
+            if len(exported) > 1:
+                for exported_task in exported[1:]:
                     self.add_task(exported_task[0])
+                    # Update the new tasks to depend on the original task.
+                    self.add_dependency(exported_task[0], task.name)
+
                 # Search the task graph for tasks which dependend on the original 
                 # task, and update them to depend on the new tasks.
                 for task2 in self._tasks.values():
+                    # Do not add a dependency to yourself.
+                    if task2.name == task.name:
+                        continue
+
+                    # Do not add dependencies to tasks that we just added to the task graph.
+                    if task2.name in exported_task_names:
+                        continue
+
                     if task.name in task2.dependencies:
-                        for exported_task in exported:
+                        for exported_task in exported[1:]:
                             self.add_dependency(task2, exported_task[0].name)
-            else:
-                exported = [exported]
 
             for exported_task in exported:
                 if export_type == "CommandLine":
@@ -226,10 +252,43 @@ class TaskGraph(object):
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
+    def get_job_attrs_for_tasktype(self, task_type):
+        """ Reads the settings file to get the default Group, Limits, and Pool 
+            for each deadline job, and then also does a lookup to see if there
+            is any overrides defined for the task_type requested.
+
+            Args:
+                task_type (str): Name of the type of task. Ex: NukeRender
+            
+            Returns:
+                Dict: Dictionary containing Group, Limits, and Pool. Intended for 
+                    use when submitting a Task to Deadline.
+        """
+
+        job_attrs = {
+            "Group": self._settings["deadline"]["default_group"],
+            "Limits": self._settings["deadline"]["default_limits"],
+            "Pool": self._settings["deadline"]["default_pool"],
+        }
+
+        # Now look up any task_type specific overrides
+        overrides = self._settings["deadline"].get("task_overrides", {})
+        task_overrides = overrides.get(task_type)
+        if task_overrides:
+            if "group" in task_overrides:
+                job_attrs["Group"] = task_overrides["group"]
+            if "limits" in task_overrides:
+                job_attrs["Limits"] = task_overrides["limits"]
+            if "pool" in task_overrides:
+                job_attrs["Pool"] = task_overrides["pool"]
+
+        return job_attrs 
+
     def execute_deadline(
         self, 
         batch_name=None, 
         inherit_environment=True, 
+        environment=None,
         temp_dir=None, 
         export_type="CommandLine"
     ):
@@ -239,9 +298,16 @@ class TaskGraph(object):
                 batch_name (str): The batch name of the job on deadline.
                 inherit_environment (bool): Passes the current environment on to 
                     the deadline job if true.
+                environment (dict): The environment to submit the job with. 
+                    (If inherit environment is true, then the 2 environments are 
+                    merged and this one take priority)
                 temp_dir (str): Temp directory to use as each tasks temp_dir.
                 export_type (str): The export format for tasks to use.
         """
+
+        # Initialize the environment as an empty dict if nothing was passed in.
+        if environment is None:
+            environment = {}
 
         import Deadline.DeadlineConnect as Connect
         deadline = Connect.DeadlineCon(
@@ -255,10 +321,15 @@ class TaskGraph(object):
                 "Name": task['obj'].name,
                 "BatchName": batch_name,
                 "UserName": os.environ.get("USER"),
+                "ExtraInfo0": os.environ.get("SHOW"),
+                "ExtraInfo1": os.environ.get("WORKSPACE"),
+                "ExtraInfo2": os.environ.get("WORKSPACE_PATH"),
                 "Plugin": "CommandLine",
                 "JobDependencies": dependencies_str,
-                "Pool": "tech",
             }
+
+            task_job_attrs = self.get_job_attrs_for_tasktype(task["obj"].__class__.__name__)
+            job_attrs.update(task_job_attrs)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
             if (hasattr(task["obj"], "start_frame") and 
@@ -271,12 +342,17 @@ class TaskGraph(object):
                 if task["obj"].chunk_size and task["obj"].chunk_size == 0:
                     job_attrs['ChunkSize'] = task["obj"].end_frame - task["obj"].start_frame + 1
 
-            # Add Environment variables.
+            environment_dict = {}
             if inherit_environment:
-                var_index = 0
-                for key, value in os.environ.items():
-                    job_attrs['EnvironmentKeyValue%s' % var_index] = "%s=%s" % (key, value)
-                    var_index += 1
+                environment_dict = dict(os.environ)
+
+            environment_dict.update(environment)
+
+            # Add Environment variables.
+            var_index = 0
+            for key, value in environment_dict.items():
+                job_attrs['EnvironmentKeyValue%s' % var_index] = "%s=%s" % (key, value)
+                var_index += 1
 
             if task['executable_args']:
                 arguments = " ".join(task['executable_args'])
@@ -291,7 +367,10 @@ class TaskGraph(object):
             }
 
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
-            print("Job: {} - {}".format(job["Name"], job["_id"]))
+            if isinstance(job, str):
+                print "Failed to submit job. {}".format(job)
+            else:
+                print("Job: {} - {}".format(job.get("Name"), job["_id"]))
             return job
 
 

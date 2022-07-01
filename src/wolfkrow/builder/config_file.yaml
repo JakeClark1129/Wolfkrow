@@ -3,41 +3,117 @@ executables:
 
 task_attribute_defaults:
   NukeRender:
-    executable: "nuke"
-    executable_args: "-t"
+    executable: "wolfkrow_nuke"
 
 replacements:
-  new_name: moved
+   shotgun_site: "$SHOTGUN_SITE_URL"
 
 tasks:
-  copy_source:
-    task_type: FileCopy
-    dependencies:
-    source: C:\Projects\Wolfkrow\src\wolfkrow\builder\config_file.yaml
-    destination: C:\backups
-  rename_source:
-    task_type: FileMove
-    dependencies: 
-      - copy_source
-    source: C:\backups\config_file.yaml
-    destination: C:\backups\new_name.yaml
-  convert_to_tiff: 
-    task_type: NukeRender
-    dependencies:
-    source: C:\temp\test_sequence\seq.%04d.exr
-    destination: C:\temp\test_sequence_output\seq.%04d.tiff
-    scripts: 
-      - C:\temp\sample_1.nk
-      - C:\temp\sample_2.nk
-      - C:\temp\sample_3.nk
-    start_frame: 1
-    end_frame: 24
-    file_type: tiff
-    bit_depth: 8 bit
+   CR2_Convert:
+      task_type: Rawline
+      dependencies:
+      source: "{input_file}"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+      pad: "{frame_padding_length}"
+      destination: "{file_publish_path_dirname}"
+      base_name: "{file_publish_path_basename}"
+      format: 1
+      colour_space: 7
+      exr_threads: 8
+      transfer_curve: 0
+      comment: "Auto generated from '{input_file}' using sgtk"
+   Upload_SG_Thumbnail:
+      task_type: ShotgunUploadThumbnail
+      dependencies: [CR2_Convert, Export_Cutref]
+      source: "{file_publish_path_dirname}/{file_publish_path_basename}.{middle_frame_padded}.exr"
+      entity_type: "CustomEntity12"
+      shotgun_id: "{onset_ref_published_id}"
+      authenticated_user: "{serialized_sg_user}"
+      shotgun_site: "{shotgun_site}"
+   Generate_Quicktime:
+      task_type: NukeRender
+      dependencies: [CR2_Convert, Export_Cutref]
+      scripts:
+         - /shows/tp_shotgun/tools/image_tools/snippets/reformat_to_UHD.nk
+      source: "{file_publish_path}"
+      destination: "{publish_version_path}"
+      file_type: "mov"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+   Export_Cutref:
+      task_type: ProcessCutref
+      source: "{input_file}"
+      retime_first: "{retimed_start_frame}"
+      retime_last: "{retimed_end_frame}"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+      frame_rate: "{frame_rate}"
+      render_path: "{file_publish_path}"
+      publish_id: "{published_id}"
+   Copy_Render:
+      task_type: FileCopy
+      source: "{input_file}"
+      destination: "{file_publish_path}"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+   Copy_TO_Plate:
+      task_type: FileCopy
+      source: "{input_file}"
+      destination: "SGTKTEMPLATE{standalone/turnover/plate}"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+   Copy_TO_Plate_backup:
+      task_type: FileCopy
+      source: "{input_file}"
+      destination: "SGTKTEMPLATE{standalone/turnover/plate/backup}"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+   Generate_TO_Quicktime:
+      task_type: NukeRender
+      dependencies: ['Copy_TO_Plate']
+      scripts:
+         - /shows/tp_shotgun/tools/image_tools/snippets/reformat_to_HD.nk
+      source: "SGTKTEMPLATE{standalone/turnover/plate}"
+      destination: "SGTKTEMPLATE{bb_standalone_turnover_publish_mov}"
+      file_type: "mov"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+   Copy_TO_Grades:
+      task_type: FileCopy
+      source: "{input_file}"
+      destination: "SGTKTEMPLATE{standalone/turnover/plate_grade}"
+   Export_DWAB_no_meta:
+      task_type: NukeRender
+      dependencies: []
+      source: "{input_files}"
+      destination: "{publish_path}"
+      file_type: "exr"
+      compression: "{compression_type}"
+      start_frame: "{start_frame}"
+      end_frame: "{end_frame}"
+      additional_write_node_properties:
+         dw_compression_level: "{compression_level}"
+         metadata: "no metadata"
 
 workflows:
-  test_workflow: 
-    - copy_source
-    - rename_source
-  Convert to Tiff: 
-    - convert_to_tiff
+   CR2 Convert:
+      - CR2_Convert
+      - Upload_SG_Thumbnail
+      - Generate_Quicktime
+   Export Cutref:
+      - Export_Cutref
+      - Upload_SG_Thumbnail
+      - Generate_Quicktime
+   plate:
+      - Copy_TO_Plate
+      - Copy_TO_Plate_backup
+   plate_grade:
+      - Copy_TO_Grades
+   plate_grade - shot_grade:
+      - Copy_TO_Grades
+      - Symlink_plate_grade_to_Shot
+   shot_luts:
+      - copy_lut_to_publish
+   Editorial Frames:
+      - Export_DWAB_no_meta

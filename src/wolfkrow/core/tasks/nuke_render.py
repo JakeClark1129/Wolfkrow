@@ -4,33 +4,54 @@
 import errno
 import logging
 import os
-import shutil
 
 from .task import Task, TaskAttribute
+from .sequence_task import SequenceTask
 from .task_exceptions import TaskValidationException
 
 
-class NukeRender(Task):
-    """ NukeRender Task implementation. Will accept a list of nuke scripts, concatenate 
-        them together (See "TODO: concatenation" function for logic), then substitute 
-        the replacements for each.
+class NukeTask(Task):
+    def export_to_command_line(self, temp_dir=None, deadline=False):
+        """ Will generate a `wolfkrow_run_task` command line command to run in 
+            order to re-construct and run this task via command line. 
 
-        Will create a Read node at the top of the node graph with the specified settings.
-        Will create a Write node at the bottom of the node graph with the specified settings.
-    """
+            Appends a '--' to the end of the command because nuke will try to accept
+            the last arguments as a frame number/range.
+        """
+        exported = super(NukeTask, self).export_to_command_line(deadline=deadline)
+
+        updated_exported = []
+        # Append a "--" to the end of the command so that nuke does not consume 
+        # the last argument as a frame number/range.
+        for export in exported:
+            obj, command = export
+            command = "{} $".format(command)
+            updated_exported.append((obj, command))
+        return updated_exported
+
+class NukeRender(NukeTask):
 
     scripts = TaskAttribute(default_value=[], configurable=True, attribute_type=list, 
-        description="list of nuke scripts to concatenate together. Python scripts will be executed.")
+        description="list of nuke scripts to concatenate together. Python scripts will be executed."
+    )
 
     # Attributes for read node
     source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
 
     # Attributes for write node
     write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
+    write_node_name = TaskAttribute(default_value=None, configurable=False, attribute_type=str, 
+        description="""
+    Name of the wrtie node to create/render from. If left unset, will automatically 
+    determine its own name (recommended)
+        """
+    )
     destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
     file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
     bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
-    codec = TaskAttribute(default_value=8, configurable=True, attribute_options=range(0, 13), attribute_type=int, description="""Which Codec to render the quicktime with.
+    codec = TaskAttribute(default_value=8, configurable=True, attribute_options=range(0, 13), attribute_type=int, 
+        description="""
+    Which Codec to render the quicktime with.
         0 - Apple ProRes 4444 XQ
         1 - Apple ProRes 4444
         2 - Apple ProRes 422 HQ
@@ -74,14 +95,28 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         3 - Deflate
     """)
 
+    # Input frame range
+    input_start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    input_end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+
     # Render frame range, and frame increment
-    start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-    end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-    increment = TaskAttribute(
+    render_start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    render_end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    render_increment = TaskAttribute(
         default_value=1, 
         configurable=True, 
         attribute_type=int, 
         description="The increments to use when rendering. Ex: 10 will render every 10th frame."
+    )
+    chunk_size = TaskAttribute(default_value=8, configurable=True, attribute_type=int, 
+    description="Number of frames to split each task into for running on multiple machines. 0 to perform no chunking")
+    generate_quicktimes_in_chunks = TaskAttribute(
+        default_value=False, 
+        configurable=True, 
+        attribute_type=bool,
+        description="Whether or not to generate quicktimes in chunks, or in a single "
+            "render. Useful for long quicktimes which you want to concatenate back "
+            "together after a distributed render on the farm."
     )
     additional_read_node_properties = TaskAttribute(
         default_value=None, 
@@ -95,19 +130,53 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         attribute_type=dict, 
         description="Dictionary containing key value pairs as 'knob_name': 'knob_value'"
     )
+    root_node_properties = TaskAttribute(
+        default_value=None, 
+        configurable=True, 
+        attribute_type=dict, 
+        description="Dictionary containing key value pairs as 'knob_name': 'knob_value' "
+            "for values to set on the root node."
+    )
 
-    def __init__(self, **kwargs):
-        """ Initialize the NukeRender Object
 
-            Kwargs:
+    def get_subtasks(self):
+        """ Constructs a NukeRenderRun task which should get executed after this task.
         """
-        super(NukeRender, self).__init__(**kwargs)
+
+        # We have to come up with a predictable write node name so that the 
+        # NukeRenderRun task knows which write node to execute.
+        self.write_node_name = "{}_wolfkrow_write".format(self.write_node_class)
+
+        # path to the generated nuke script.
+        script_path = "{root_dir}/{task_name}.nk".format(
+            root_dir=self.temp_dir,
+            task_name=self.name,
+        )
+
+        chunk_size = self.chunk_size
+        if self.file_type.lower() in ["mov"] and self.generate_quicktimes_in_chunks is False:
+            chunk_size = self.render_end_frame - self.render_start_frame + 1
+
+        # Create NukeRenderRun task.
+        nuke_render_run = NukeRenderRun(
+            name=self.name + "_render",
+            script=script_path, 
+            write_node=self.write_node_name,
+            start_frame=self.render_start_frame, 
+            end_frame=self.render_end_frame, 
+            increment=self.render_increment,
+            chunk_size=chunk_size,
+            command_line_executable=self.command_line_executable,
+            python_script_executable=self.python_script_executable,
+        )
+
+        return [nuke_render_run]
 
     def validate(self):
-        """ Preforms Validation checks for NukeRender Task.
+        """ Preforms Validation checks for NukeRenderRun Task.
 
             Raises:
-                TaskValidationException: NukeRender task is not properly initialized
+                TaskValidationException: NukeRenderRun task is not properly initialized
         """
         super(NukeRender, self).validate()
 
@@ -124,17 +193,6 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             except OSError as e:
                 if e.errno != errno.EEXIST:
                     raise
-
-    def export_to_command_line(self, deadline=False):
-        """ Will generate a `wolfkrow_run_task` command line command to run in order to 
-            re-construct and run this task via command line. 
-
-            Appends a '--' to the end of the command because nuke will try to execute
-            accept the last arguments as a frame number/range.
-        """
-        obj, command = super(NukeRender, self).export_to_command_line(deadline=deadline)
-        command = "{} --".format(command)
-        return (obj, command)
 
     def _find_bottom_node(self, node):
         """ Finds the bottom node of the node tree that the supplied node belongs to.
@@ -246,7 +304,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # Connect the current_bottom_node to the new scripts top_node. 
         # current_bottom_node will be None for an empty nuke script
         if current_bottom_node is not None:
-            top_node.set_input(0, current_bottom_node)
+            top_node.setInput(0, current_bottom_node)
 
         return bottom_node
 
@@ -288,9 +346,6 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                     print("Failed to set knob '{}' to {!r}".format(key, value))
 
     def run(self):
-        """ Performs the nuke render.
-        """
-
         # Import nuke here because the main engine which creates the tasks will not be run in a nuke process.
         import nuke
 
@@ -308,18 +363,46 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         read_node = nuke.createNode("Read")
         read_node.knob("raw").setValue(True)
         read_node.knob("file").setValue(self.source)
-        read_node.knob("first").setValue(self.start_frame)
-        read_node.knob("last").setValue(self.end_frame)
+        read_node.knob("first").setValue(self.input_start_frame)
+        read_node.knob("last").setValue(self.input_end_frame)
 
         if self.additional_read_node_properties:
             self.set_node_knob_values_from_dict(read_node, self.additional_read_node_properties)
 
+        time_offset = None
+        if self.input_start_frame != self.render_start_frame:
+            time_offset = nuke.createNode("TimeOffset")
+            time_offset.setSelected(False)
+            time_offset.knob("time_offset").setValue(self.render_start_frame - self.input_start_frame)
+            time_offset.setInput(0, read_node)
+
         if top_node:
-            top_node.setInput(0, read_node)
+            if time_offset:
+                top_node.setInput(0, time_offset)
+            else:
+                top_node.setInput(0, read_node)
+
+        # determine the destination file path:
+
+        # If the destination is just a directory, calculate the output filename 
+        # from the input name.
+        if self.destination.endswith(os.sep):
+            source_basename = os.path.basename(self.source)
+            base, ext = os.path.splitext(source_basename)
+            dest_basename = "{}.{}".format(base, self.file_type)
+            destination = os.path.join(self.destination, dest_basename)
+        else:
+            destination = self.destination
+
+        # Select the bottom node so that the write node automatically gets connected to it.
+        if bottom_node:
+            read_node.setSelected(False)
+            bottom_node.setSelected(True)
 
         # Create Write node for self.destination
         write_node = nuke.createNode(self.write_node_class)
-        write_node.knob("file").setValue(self.destination)
+        write_node.knob("name").setValue(self.write_node_name)
+        write_node.knob("file").setValue(destination)
         write_node.knob("file_type").setValue(self.file_type)
         write_node.knob("raw").setValue(True)
 
@@ -336,6 +419,10 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         if self.additional_write_node_properties:
             self.set_node_knob_values_from_dict(write_node, self.additional_write_node_properties)
 
+        if self.root_node_properties:
+            root_node = nuke.toNode("root")
+            self.set_node_knob_values_from_dict(root_node, self.root_node_properties)
+
         # If there is no bottom node, set the read node as the bottom_node
         if not bottom_node:
             bottom_node = read_node
@@ -347,9 +434,105 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             root_dir=self.temp_dir,
             task_name=self.name,
         )
-        logging.info("Generated nuke script '{}'".format(script_path))
+
+        # Now that everything is concatenated, substitute all the replacements:
+        import wolfkrow.core.utils as utils        
+        all_nodes = nuke.allNodes()
+        for node in all_nodes:
+            for knob_name in node.knobs():
+                knob = node[knob_name]
+                knob_value = knob.value()
+                if isinstance(knob_value, basestring):
+                    new_knob_value = utils.replace_replacements(knob_value, self.replacements)
+                    if knob_value != new_knob_value:
+                        try:
+                            knob.setValue(new_knob_value)
+                        except Exception as exception:
+                            import traceback
+                            traceback.print_exc()
+                            print("Warning: Unable to substitute knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(node, knob, knob_value, new_knob_value))
+
+                index = 0
+                if knob.hasExpression(index):
+                    animations = knob.animations()
+                    for index, animation in enumerate(animations):
+                        import re
+                        expression = animation.expression()
+                        expression = re.sub("\\\\{", "{", expression)
+                        expression = re.sub("\\\\}", "}", expression)
+                        new_expression = utils.replace_replacements(expression, self.replacements)
+                        if expression != new_expression:
+                            try:
+                                knob.setExpression(new_expression, index)
+                            except Exception as exception:
+                                import traceback
+                                traceback.print_exc()
+                                print("Warning: Unable to substitute expression knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(node, knob, knob_value, new_knob_value))
         nuke.scriptSaveAs(script_path, overwrite=1)
+        return 0
+
+
+# INFO: ===========================================================================
+# Nuke Render Run is the part of the nuke render which actually does the rendering.
+# The first task handles the concatenation and generation of the nuke script.
+# =================================================================================
+
+class NukeRenderRun(NukeTask, SequenceTask):
+    """ NukeRender Task implementation. Will accept a list of nuke scripts, concatenate 
+        them together (See "TODO: concatenation" function for logic), then substitute 
+        the replacements for each.
+
+        Will create a Read node at the top of the node graph with the specified settings.
+        Will create a Write node at the bottom of the node graph with the specified settings.
+    """
+
+    script = TaskAttribute(default_value=None, configurable=True, attribute_type=str, 
+        description="list of nuke scripts to concatenate together. Python scripts will be executed."
+    )
+
+    write_node = TaskAttribute(default_value=None, configurable=True, attribute_type=str, 
+        description="Name of the write node to execute in the script."
+    )
+
+    increment = TaskAttribute(
+        default_value=1, 
+        configurable=True, 
+        attribute_type=int, 
+        description="The increments to use when rendering. Ex: 10 will render every 10th frame."
+    )
+
+    def __init__(self, **kwargs):
+        """ Initialize the NukeRenderRun Object
+
+            Kwargs:
+        """
+        super(NukeRenderRun, self).__init__(**kwargs)
+
+    def validate(self):
+        """ Preforms Validation checks for NukeRenderRun Task.
+
+            Raises:
+                TaskValidationException: NukeRenderRun task is not properly initialized
+        """
+        super(NukeRenderRun, self).validate()
+
+    def setup(self):
+        """ Will create destination directory if it does not already exist.
+
+            Raises: 
+                OSError: Unable to create destination directory
+        """
+        pass
+
+    def run(self):
+        """ Performs the nuke render.
+        """
+        # Import nuke here because the main engine which creates the tasks will not be run in a nuke process.
+        import nuke
+
+        # Open the nuke script.
+        nuke.scriptOpen(self.script)
 
         # Execute the write node to kick off the render.
-        nuke.execute(write_node.knob("name").value(), self.start_frame, self.end_frame, self.increment)
+        nuke.execute(self.write_node, self.start_frame, self.end_frame, self.increment)
         return 0

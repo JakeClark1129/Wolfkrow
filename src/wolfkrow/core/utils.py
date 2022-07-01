@@ -49,14 +49,25 @@ def replace_replacements_dict_crawler(dictionary, replacements, sgtk=None):
                     value[index] = string.Formatter().vformat(value[index], (), replacements)
         elif isinstance(value, str):                    
             # Replace any replacements in the string.
-            dictionary[key] = _replace_replacements(value, replacements, sgtk=sgtk)
+            dictionary[key] = replace_replacements(value, replacements, sgtk=sgtk)
 
-def _replace_replacements(value, replacements, sgtk=None):
+def replace_replacements(value, replacements, sgtk=None):
 
     # Replace the replacements following the regular string format syntax ("{name}").
     # Note: Replacing these replacements first, allows you to use a replacement 
     # in the name of a SGTK template.
-    value = string.Formatter().vformat(value, (), replacements)
+    try:
+        value = string.Formatter().vformat(value, (), replacements)
+    except IndexError:
+        # There is some cases where "value" might contain sub-strings like {0}, 
+        # which will fail with an index error because we are passing an empty set
+        # into the vformat call.
+        # TODO: Define a special list, which when indexed returns a string.
+        #   EG: smart_list[4] == "{4}"
+        #   which will allow us to just leave these string as they were without 
+        #   catching any exceptions.
+        print("Warning: Failed to replace value '{}'".format(value))
+        pass
 
     # Check for SGTK templates defined in the config.
     regexp = "(SGTKTEMPLATE<)(.*)(>)"
@@ -96,7 +107,7 @@ def _get_sgtk_template_value(template_name, replacements, sgtk=None):
 
     for field in template.keys:
         if field in replacements:
-            corrected_fields[field] = template.keys[field].value_from_str(replacements[field])
+            corrected_fields[field] = template.keys[field].value_from_str(str(replacements[field]))
 
 
     value = template.apply_fields(corrected_fields)

@@ -20,6 +20,9 @@ class Link(FileOperation):
 
     link_type = TaskAttribute(default_value="symlink", attribute_options=["symlink", "hardlink"])
 
+    overwrite = TaskAttribute(default_value=False, attribute_type=bool, 
+        description="Whether or not to overwrite a link which already exists.")
+
     def validate(self):
         """ Preforms Validation checks for the Link Task. Will check to make sure 
             that the source file is not a directory for hardlinking.
@@ -42,6 +45,13 @@ class Link(FileOperation):
                         "is specified".format(self.destination))
 
     def operate(self, source, destination):
+        # Delete the source dir if it exists and overwrite is enabled.
+        if self.overwrite and os.path.exists(destination):
+            if os.path.islink(destination) or os.path.isfile(destination):
+                os.remove(destination)
+            elif os.path.isdir(destination):
+                os.rmdir(destination)
+
         if self.link_type == "symlink":
             os.symlink(source, destination)
         elif self.link_type == "hardlink":

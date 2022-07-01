@@ -163,5 +163,5 @@ class FileOperation(Task):
             self.operate(f, dest)
         return 0
 
-    def operate(self, source, destination):
+    def operate(self, source, destination=None):
         raise NotImplementedError("operate method not implemented")
