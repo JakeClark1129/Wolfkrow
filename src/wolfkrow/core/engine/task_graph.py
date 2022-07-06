@@ -29,7 +29,7 @@ class TaskGraph(object):
     """ Provides an interface to build, and execute a series of tasks.
     """
 
-    def __init__(self, name, replacements=None, temp_dir=None):
+    def __init__(self, name, replacements=None, temp_dir=None, settings_file=None):
         """ Initializes TaskGraph object.
 
             Args: 
@@ -38,10 +38,14 @@ class TaskGraph(object):
             Kwargs:
                 replacements (dict): A dictionary of string replacements used by tasks.
                 temp_dir (str): Temp directory to use as each tasks temp_dir.
+                settings_file (str): Path to the settings file to use for wolfkrows settings.
         """
 
         self._graph = networkx.DiGraph()
-        self._settings = utils.settings
+
+        # Get the settings:
+        settings_manager = utils.WolfkrowSettings(settings_file=settings_file)
+        self._settings = settings_manager.settings
         self._tasks = {}
         self.name = name
         self.replacements = replacements or {}
@@ -252,7 +256,7 @@ class TaskGraph(object):
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
-    def get_job_attrs_for_tasktype(self, task_type):
+    def _get_additional_job_attrs(self, replacements=None, sgtk=None, task_type=None):
         """ Reads the settings file to get the default Group, Limits, and Pool 
             for each deadline job, and then also does a lookup to see if there
             is any overrides defined for the task_type requested.
@@ -270,6 +274,22 @@ class TaskGraph(object):
             "Limits": self._settings["deadline"]["default_limits"],
             "Pool": self._settings["deadline"]["default_pool"],
         }
+
+        # Iterate over and add the attributes from the extra job attributes setting.
+        job_attributes_setting = self._settings["deadline"].get("extra_job_attributes", {})
+        for attr_key, attr_value in job_attributes_setting.items():
+            # replace replacements in the attr value:
+            if replacements:
+                attr_value_replaced = utils.replace_replacements(
+                    attr_value, 
+                    replacements, 
+                    sgtk=sgtk
+                )
+            else:
+                # Assume no relpacements necessary if none are provided.
+                attr_value_replaced = attr_value
+
+            job_attrs[attr_key] = attr_value_replaced
 
         # Now look up any task_type specific overrides
         overrides = self._settings["deadline"].get("task_overrides", {})
@@ -320,16 +340,16 @@ class TaskGraph(object):
             job_attrs = {
                 "Name": task['obj'].name,
                 "BatchName": batch_name,
-                "UserName": os.environ.get("USER"),
-                "ExtraInfo0": os.environ.get("SHOW"),
-                "ExtraInfo1": os.environ.get("WORKSPACE"),
-                "ExtraInfo2": os.environ.get("WORKSPACE_PATH"),
                 "Plugin": "CommandLine",
                 "JobDependencies": dependencies_str,
             }
 
-            task_job_attrs = self.get_job_attrs_for_tasktype(task["obj"].__class__.__name__)
-            job_attrs.update(task_job_attrs)
+            additional_job_attrs = self._get_additional_job_attrs(
+                replacements=task["obj"].replacements,
+                sgtk=task["obj"].sgtk,
+                task_type=task["obj"].__class__.__name__
+            )
+            job_attrs.update(additional_job_attrs)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
             if (hasattr(task["obj"], "start_frame") and 

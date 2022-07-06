@@ -1,3 +1,5 @@
+
+#TODO: Read setting file location from environment variable.
 deadline:
   host_name: deadline-manager
   port: 8082
@@ -13,4 +15,4 @@ deadline:
     ExtraInfo0: "$SHOW"
     ExtraInfo1: "$WORKSPACE"
     ExtraInfo2: "$WORKSPACE_PATH"
-    UserName: "$USER"
+    UserName: "{user}"
