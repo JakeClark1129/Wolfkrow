@@ -234,6 +234,7 @@ on the farm."""
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+    sgtk = TaskAttribute(default_value=None, configurable=False, serialize=False)
 
     def __init__(self, **kwargs):
         """ Initializes Task object
@@ -473,22 +474,22 @@ sys.exit(ret)""".format(
         return exported_tasks
 
     def export_subtasks(self, export_type, temp_dir=None, job_name=None, deadline=False):
-        exported_subtasks = []
+        all_exported_subtasks = []
         subtasks = self.get_subtasks()
 
         #TODO: If job_name is passed in, we need to modify it for each subtask so 
         #   that each job still has a unique name.
 
         for subtask in subtasks:
-            exported_subtasks.extend(subtask.export(
-                    export_type,
-                    temp_dir=temp_dir,
-                    #job_name=job_name,
-                    deadline=deadline
-                )
+            exported_subtasks = subtask.export(
+                export_type,
+                temp_dir=temp_dir,
+                #job_name=job_name,
+                deadline=deadline
             )
+            all_exported_subtasks.extend(exported_subtasks)
 
-        return exported_subtasks
+        return all_exported_subtasks
 
     def get_subtasks(self):
         """ Gives each Task object the opportunity add additional tasks to the task_graph 
@@ -538,6 +539,8 @@ sys.exit(ret)""".format(
                 replacements (dict): A dictionary of string replacements.
                 config_files (list): List of file paths used as the configuration 
                     files which constructed this task.
+                sgtk (SGTK): SGTK configuration instance. Useful if your pipeline is integrated 
+                    with sgtk.
         """
 
         # Ensure that temp_dir is added so that the task can be configured with 
@@ -564,6 +567,13 @@ sys.exit(ret)""".format(
 
         if temp_dir and "temp_dir" not in filtered_data_dict:
             filtered_data_dict["temp_dir"] = temp_dir
+
+        # If we have a sgtk instance, then add it to the task Object. We don't 
+        # know what some custom task definitions might want it for.
+        if sgtk:
+            if sgtk in filtered_data_dict:
+                print "Warning: 'sgtk' in Task data but being overwritten by a SGTK project configuration instance"
+            filtered_data_dict["sgtk"] = sgtk
 
         obj = cls(**filtered_data_dict)
         return obj
