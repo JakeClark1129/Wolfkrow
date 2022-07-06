@@ -9,6 +9,22 @@ replacements:
    shotgun_site: "$SHOTGUN_SITE_URL"
 
 tasks:
+   Group_Test:
+      task_type: Group
+      tasks:
+         - Group_Test_1
+         - Group_Test_2
+         - Group_Test_3
+   Group_Test_1:
+      task_type: CommandLine
+      command: "echo 1"
+   Group_Test_2:
+      task_type: CommandLine
+      command: "echo 2"
+   Group_Test_3:
+      task_type: CommandLine
+      command: "echo 3"
+
    CR2_Convert:
       task_type: Rawline
       dependencies:
