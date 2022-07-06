@@ -3,9 +3,9 @@ import os
 import re
 import string
 import yaml
-import wolfkrow.core.tasks as tasks
-from wolfkrow.core.engine.task_graph import TaskGraph
-from wolfkrow.core import utils
+from ..core import tasks
+from ..core.engine.task_graph import TaskGraph
+from ..core import utils
 
 class LoaderException(Exception):
     """ Exception for generic Task errors

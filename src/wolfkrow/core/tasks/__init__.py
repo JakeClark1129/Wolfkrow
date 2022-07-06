@@ -17,17 +17,14 @@ from . import *
 
 # Search direcotries found in the WOLFKROW_TASK_SEARCH_PATHS.
 # Note: Tasks defined more than once will overwrite and previous definitions found.
-import platform
-if platform.system() == "Windows":
-    path_sep = ";"
-elif platform.system() == "Darwin":
-    path_sep = ":"
+
+PATH_SEP = ":"
 
 import imp
 import os
 search_paths = os.environ.get('WOLFKROW_TASK_SEARCH_PATHS')
 if search_paths:
-    for item in search_paths.split(path_sep):
+    for item in search_paths.split(PATH_SEP):
         if os.path.isdir(item):
             files = os.listdir(item)
             for file_name in files:
