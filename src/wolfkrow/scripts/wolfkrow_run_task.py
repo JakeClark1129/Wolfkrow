@@ -8,7 +8,7 @@ from wolfkrow.core.tasks import all_tasks
 def parse_args():
     """ Parses the args passed into run_task.
 
-        Expects --task_name to be provided, and then an arbitrary about of follow 
+        Expects --task_name to be provided, and then an arbitrary amount of follow 
         up arguments matching the form "--key value". Uses the additional arguments 
         to construct a dictionary which is later used to instantiate a Task Object.
 
@@ -29,8 +29,7 @@ def parse_args():
     task_args = dict(zip(unknown[:-1:2],unknown[1::2]))
     return known, task_args
 
-
-if __name__ == '__main__':
+def main():
     args, task_args = parse_args()
     task_class = all_tasks.get(args.task_name)
 
@@ -43,4 +42,8 @@ if __name__ == '__main__':
     
     # Execute the Task Object.
     ret = task()
+    return ret
+
+if __name__ == '__main__':
+    ret = main()
     sys.exit(ret)
