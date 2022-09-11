@@ -35,6 +35,9 @@ setup(
         "": "src"
         # "wolfkrow": ["./src/bin", "./src/wolfkrow"],
     },
-    install_requires=['mpi4py>=2.0',
+    install_requires=[
+        'deadline',
+        'networkx',
+        'yaml',   
     ],
 )
