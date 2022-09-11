@@ -6,7 +6,7 @@ import os
 # os.path.listdir()
 
 print("=" * 80)
-packages = find_packages(where="src", include=["wolfkrow", "wolfkrow.*", "bin"])
+packages = find_packages(where="src", include=["wolfkrow", "wolfkrow.*"])
 # packages.append("bin")
 print packages
 print("=" * 80)
