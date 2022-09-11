@@ -1,0 +1,33 @@
+executables:
+  wolfkrow_run_task: "wolfkrow_run_task" # Path to the wolfkrow_run_task executable.
+
+task_attribute_defaults:
+  NukeRender:
+    executable: "wolfkrow_nuke"
+
+replacements:
+   shotgun_site: "$SHOTGUN_SITE_URL"
+
+tasks:
+   Group_Test:
+      task_type: TaskGroup
+      task_names:
+         - Group_Test_1
+         - Group_Test_2
+         - Group_Test_3
+   Group_Test_1:
+      task_type: CommandLine
+      script: "echo"
+      args: ["1"]
+   Group_Test_2:
+      task_type: CommandLine
+      script: "echo"
+      args: ["2"]
+   Group_Test_3:
+      task_type: CommandLine
+      script: "echo"
+      args: ["3"]
+
+workflows:
+   Group_Test:
+      - Group_Test

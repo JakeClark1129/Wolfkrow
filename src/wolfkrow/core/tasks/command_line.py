@@ -51,3 +51,6 @@ class CommandLine(Task):
         )
 
         return [(self, command)]
+
+    # TODO: We need to implement the run method, otherwise the PythonScript export 
+    # type won't work for this task type. It should be a subprocess call.

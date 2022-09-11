@@ -1,4 +1,5 @@
 import logging
+import os
 import traceback
 
 logging.basicConfig(level=logging.DEBUG)
@@ -7,6 +8,7 @@ from wolfkrow.core.engine import task_graph
 from wolfkrow.core.tasks.file_copy import FileCopy
 from wolfkrow.core.tasks import task_exceptions
 from wolfkrow.core.tasks.test_tasks import *
+from wolfkrow.core import utils
 
 #TODO: Turn these into real unit tests.
 def test_taskGraphExecuteSuccess():
@@ -39,4 +41,53 @@ def test_taskGraphExecuteSuccess():
             logging.info("TEST 'test_taskGraphExecuteSuccess' FAILED")
     logging.info("===========================================\n\n")
 
+
+def test_get_additional_job_attrs():
+    logging.info("============================================")
+    logging.info("RUNNING TEST 'test_get_additional_job_attrs'")
+    logging.info("============================================")
+
+    settings_file = os.path.join(os.path.dirname(__file__), "test_settings.yaml")
+    job = task_graph.TaskGraph(
+        "taskGraphExecuteSuccess",
+        settings_file=settings_file
+    )
+
+    # Set the environment variables required in the test_setting.yaml file.
+    os.environ["SHOW"] = "foobar"
+    os.environ["WORKSPACE"] = "Show"
+    os.environ["WORKSPACE_PATH"] = "/shows/foobar"
+
+    replacements = {
+        "user": "test_user"
+    }
+    test_attrs = job.get_additional_job_attrs(replacements=replacements)
+
+    sample_attrs = {
+        "ExtraInfo0": "foobar",
+        "ExtraInfo1": "Show",
+        "ExtraInfo2": "/shows/foobar",
+        "UserName": "test_user",
+    }
+    
+    success = True
+    for attr_key, attr_value in sample_attrs.items():
+        if attr_key not in test_attrs:
+            success = False
+            break
+        if attr_value != test_attrs[attr_key]:
+            success = False
+            break
+
+    if success:
+        logging.info("TEST 'test_get_additional_job_attrs' SUCCESSFUL")
+    else:
+        logging.info("Test attrs: ")
+        logging.info(test_attrs)
+        logging.info("Sample attrs: ")
+        logging.info(sample_attrs)
+        logging.info("TEST 'test_get_additional_job_attrs' FAILED")
+    logging.info("============================================\n\n")
+
 test_taskGraphExecuteSuccess()
+test_get_additional_job_attrs()
