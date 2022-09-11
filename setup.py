@@ -1,39 +1,24 @@
 from setuptools import setup
 from setuptools import find_packages
 
-import os
-# Find the scripts:
-# os.path.listdir()
-
-print("=" * 80)
 packages = find_packages(where="src", include=["wolfkrow", "wolfkrow.*"])
-# packages.append("bin")
-print packages
-print("=" * 80)
-
-print("=" * 80)
-import glob
-scripts = glob.glob("src/bin/*")
-print scripts
-print("=" * 80)
 
 setup(
     name='wolfkrow',
-    version='0.1.0',
-    description='A example Python package',
-    url='https://github.com/shuds13/pyexample',
-    author='Stephen Hudson',
-    author_email='shudson@anl.gov',
-    license='BSD 2-clause',
+    version='1.0.0',
+    description='Wolfkrow is a Task execution engine, which allows users to easily string a series of tasks together in order to create a workflow.',
+    url='https://github.com/JakeClark1129/Wolfkrow',
+    author='Jacob Clark',
+    author_email='jakeclark1129@gmail.com',
+    license='GNU GPLv3',
     packages=packages,
     entry_points={
-    'console_scripts': [
-        'wolfkrow_run_task=wolfkrow.core.engine.wolfkrow_run_task:main',
-    ],
+        'console_scripts': [
+            'wolfkrow_run_task=wolfkrow.core.engine.wolfkrow_run_task:main',
+        ],
     },
     package_dir={
         "": "src"
-        # "wolfkrow": ["./src/bin", "./src/wolfkrow"],
     },
     install_requires=[
         'deadline',
