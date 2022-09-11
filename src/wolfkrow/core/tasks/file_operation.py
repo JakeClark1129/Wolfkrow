@@ -1,6 +1,8 @@
 """ Module implementing the FileOperation task.
 """
+from __future__ import print_function
 
+from builtins import str
 import errno
 import os
 import shutil

@@ -4,7 +4,7 @@ packages = find_packages(where="src", include=["wolfkrow", "wolfkrow.*"])
 
 setup(
     name='wolfkrow',
-    version='1.0.0',
+    version='1.1.0',
     description='Wolfkrow is a Task execution engine, which allows users to easily string a series of tasks together in order to create a workflow.',
     url='https://github.com/JakeClark1129/Wolfkrow',
     author='Jacob Clark',
@@ -21,7 +21,9 @@ setup(
     },
     install_requires=[
         'deadline', # TODO: This isn't really a real requirement.
+        'future',
         'networkx',
+        'six',
         'yaml', # I think this should probably be PyYaml.
     ],
 )

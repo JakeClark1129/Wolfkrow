@@ -1,6 +1,9 @@
 """ Module implementing the FileCopy task.
 """
+from __future__ import print_function
 
+from builtins import str
+from builtins import range
 import errno
 import os
 import shutil
@@ -53,7 +56,7 @@ file name as the input images will be used, with the output format dependent fil
     format = CommandLineArg(
         default_value=None,
         command_line_arg="--format",
-        attribute_options=range(0, 8),
+        attribute_options=list(range(0, 8)),
         configurable=True,
         description="""Output file format. Default is 1.
     0 = DPX
@@ -70,7 +73,7 @@ file name as the input images will be used, with the output format dependent fil
     transfer_curve = CommandLineArg(
         default_value=None, 
         command_line_arg="--transfer-curve", 
-        attribute_options=range(0, 12), 
+        attribute_options=list(range(0, 12)), 
         configurable=True,
         description="""Transfer curve (aka. Gamma) to use for output files. Default is 0.
      0 = Linear
@@ -91,7 +94,7 @@ file name as the input images will be used, with the output format dependent fil
     colour_space = CommandLineArg(
         default_value=None, 
         command_line_arg="--color-space", 
-        attribute_options=range(0, 16), 
+        attribute_options=list(range(0, 16)), 
         configurable=True,
         description="""Color space to use for output files. Default is 0.
     0 = Camera Native
@@ -116,7 +119,7 @@ file name as the input images will be used, with the output format dependent fil
     exr_threads = CommandLineArg(
         default_value=None, 
         command_line_arg="--exr-threads", 
-        attribute_options=range(0, 12), 
+        attribute_options=list(range(0, 12)), 
         configurable=True,
         description="Number of OpenEXR encoder threads. Default is 1. Range is 1 - 12."
     )
@@ -149,7 +152,7 @@ file name as the input images will be used, with the output format dependent fil
                 TaskValidationException: Rawline task is not properly initialized
         """
 
-        for attr_name, attr in self.task_attributes.items():
+        for attr_name, attr in list(self.task_attributes.items()):
             if attr.required is True and getattr(self, attr_name) is None:
                 
                 raise TaskValidationException("Required argument {arg} not supplied.".format(

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import logging
 import traceback
 
@@ -9,17 +10,6 @@ from wolfkrow.core.tasks.file_copy import FileCopy
 from wolfkrow.core.tasks import task_exceptions
 from wolfkrow.core.tasks.test_tasks import *
 
-# ======================================================
-# ==================== ENABLE PTVSD ====================
-# ======================================================
-import ptvsd
-ptvsd.enable_attach()
-print("Waiting for attach...")
-ptvsd.wait_for_attach()
-# ptvsd.break_into_debugger()
-# ======================================================
-# ======================================================
-# ======================================================
 #TODO: Turn these into real unit tests.
 
 def test_taskGraphExecuteSuccess():

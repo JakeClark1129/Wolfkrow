@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from builtins import zip
+from builtins import range
 import argparse
 import sys
 
@@ -26,7 +28,7 @@ def parse_args():
     for index in range(len(unknown)):
         if index % 2 == 0:
             unknown[index] = unknown[index].lstrip('-')
-    task_args = dict(zip(unknown[:-1:2],unknown[1::2]))
+    task_args = dict(list(zip(unknown[:-1:2],unknown[1::2])))
     return known, task_args
 
 def main():

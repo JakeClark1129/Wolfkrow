@@ -1,3 +1,7 @@
+from __future__ import print_function
+from builtins import str
+from builtins import range
+from builtins import object
 import os
 import re
 import string
@@ -62,7 +66,7 @@ def replace_replacements_dict_crawler(dictionary, replacements, sgtk=None):
             sgtk: Optional Shotgun toolkit instance to allow the use of templates.
     """
 
-    for key, value in dictionary.items():
+    for key, value in list(dictionary.items()):
         if isinstance(value, dict):
             replace_replacements_dict_crawler(value, replacements, sgtk=sgtk)
         elif isinstance(value, list):

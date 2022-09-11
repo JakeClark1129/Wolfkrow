@@ -71,7 +71,7 @@ def test_get_additional_job_attrs():
     }
     
     success = True
-    for attr_key, attr_value in sample_attrs.items():
+    for attr_key, attr_value in list(sample_attrs.items()):
         if attr_key not in test_attrs:
             success = False
             break
