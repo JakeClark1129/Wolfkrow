@@ -1,5 +1,4 @@
-from setuptools import setup
-from setuptools import find_packages
+from setuptools import setup, find_packages
 
 packages = find_packages(where="src", include=["wolfkrow", "wolfkrow.*"])
 
@@ -21,8 +20,8 @@ setup(
         "": "src"
     },
     install_requires=[
-        'deadline',
+        'deadline', # TODO: This isn't really a real requirement.
         'networkx',
-        'yaml',   
+        'yaml', # I think this should probably be PyYaml.
     ],
 )
