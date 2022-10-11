@@ -11,6 +11,7 @@ setup(
     author_email='jakeclark1129@gmail.com',
     license='GNU GPLv3',
     packages=packages,
+    package_data={'': ['core/settings.yaml', 'builder/config_file.yaml']},
     entry_points={
         'console_scripts': [
             'wolfkrow_run_task=wolfkrow.core.engine.wolfkrow_run_task:main',
@@ -24,6 +25,6 @@ setup(
         'future',
         'networkx',
         'six',
-        'yaml', # I think this should probably be PyYaml.
+        'PyYAML',
     ],
 )
