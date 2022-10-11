@@ -281,16 +281,11 @@ class TaskGraph(object):
         job_attributes_setting = self._settings["deadline"].get("extra_job_attributes", {})
         for attr_key, attr_value in list(job_attributes_setting.items()):
             # replace replacements in the attr value:
-            if replacements:
-                attr_value_replaced = utils.replace_replacements(
-                    attr_value, 
-                    replacements, 
-                    sgtk=sgtk
-                )
-            else:
-                # Assume no relpacements necessary if none are provided.
-                attr_value_replaced = attr_value
-
+            attr_value_replaced = utils.replace_replacements(
+                attr_value, 
+                replacements, 
+                sgtk=sgtk
+            )
             job_attrs[attr_key] = attr_value_replaced
 
         # Now look up any task_type specific overrides

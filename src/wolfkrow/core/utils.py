@@ -38,7 +38,7 @@ class WolfkrowSettings(object):
             file_contents = handle.read()
         settings = yaml.load(file_contents, Loader=yaml.Loader)
         self.settings = settings
-    
+
     def set_settings_file(self, settings_file):
         self.settings_file = settings_file
         # Now reload the config
@@ -74,7 +74,7 @@ def replace_replacements_dict_crawler(dictionary, replacements, sgtk=None):
                 if isinstance(value[index], dict):
                     replace_replacements_dict_crawler(value[index], replacements, sgtk=sgtk)
                 elif isinstance(value[index], basestring):
-                    value[index] = string.Formatter().vformat(value[index], (), replacements)
+                    value[index] = replace_replacements(value[index], replacements, sgtk=sgtk)
         elif isinstance(value, basestring):                    
             # Replace any replacements in the string.
             dictionary[key] = replace_replacements(value, replacements, sgtk=sgtk)
@@ -86,6 +86,12 @@ def replace_replacements(value, replacements, sgtk=None):
     # name which will allow for some neat use cases. Such as setting the name of the
     # replacement you want to use in the environment. IE: {$MY_REPLACEMENT_NAME_FROM_ENV}
     value = os.path.expandvars(value)
+
+    # If there are no replacements passed in, then there is nothing left to do.
+    # This is useful in cases where we don't have replacements, but still want to 
+    # do environment variable expansion.
+    if replacements is None:
+        return value
 
     # Replace the replacements following the regular string format syntax ("{name}").
     # Note: Replacing these replacements first, allows you to use a replacement 
@@ -101,7 +107,6 @@ def replace_replacements(value, replacements, sgtk=None):
         #   which will allow us to just leave these string as they were without 
         #   catching any exceptions.
         print("Warning: Failed to replace value '{}'".format(value))
-        pass
 
     # Check for SGTK templates defined in the config.
     regexp = "(SGTKTEMPLATE<)(.*)(>)"
