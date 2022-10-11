@@ -61,7 +61,7 @@ def test_get_additional_job_attrs():
     replacements = {
         "user": "test_user"
     }
-    test_attrs = job.get_additional_job_attrs(replacements=replacements)
+    test_attrs = job._get_additional_job_attrs(replacements=replacements)
 
     sample_attrs = {
         "ExtraInfo0": "foobar",
