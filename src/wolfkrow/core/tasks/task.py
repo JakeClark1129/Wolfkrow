@@ -1,4 +1,8 @@
+from __future__ import print_function
 
+from builtins import str
+from past.builtins import basestring
+from builtins import object
 import ast
 import collections
 import copy
@@ -12,6 +16,7 @@ from weakref import WeakKeyDictionary
 
 from wolfkrow.core.tasks.task_exceptions import TaskException
 from wolfkrow.core import utils
+from future.utils import with_metaclass
 
 
 
@@ -180,7 +185,7 @@ class TaskType(type):
         # Note: Turns out that this is a wrong assumption. Values do not appear in __dict__ in the same order that they are added to the class. (I Think this is a python 2.7 vs 3.x difference). (OR maybe it is a "six" thing?)
         classObj.task_attributes = collections.OrderedDict()
         for cl in reversed(classObj.__mro__[:-1]):
-            for name, attr in cl.__dict__.items():
+            for name, attr in list(cl.__dict__.items()):
                 if isinstance(attr, TaskAttribute):
                     classObj.task_attributes[name] = attr
 
@@ -192,7 +197,7 @@ class TaskType(type):
         return classObj
 
 
-class Task(object):
+class Task(with_metaclass(TaskType, object)):
     """ Base Object used for every task. The TaskGraph will be used to build 
         graph of tasks from configuration, which will later be executed as a 
         series of tasks to complete a job.
@@ -214,8 +219,6 @@ class Task(object):
             Setup -- Called immediately after the task object is executed.
             Run -- Called immediately after the Setup method is called.
     """
-
-    __metaclass__ = TaskType
 
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
@@ -340,7 +343,7 @@ on the farm."""
 
         arg_str = ""
 
-        for attribute_name, attribute_obj  in self.task_attributes.items():
+        for attribute_name, attribute_obj  in list(self.task_attributes.items()):
             if attribute_obj.serialize is False:
                 continue
 
@@ -513,7 +516,7 @@ sys.exit(ret)""".format(
         # We only want to serialize the 'TaskAttribute' attributes which are all 
         # defined at the class level as descriptors. to get all instances, we m
         argStr = ""
-        for attribute_name, attribute_obj  in self.task_attributes.items():
+        for attribute_name, attribute_obj  in list(self.task_attributes.items()):
             if attribute_obj.serialize:
                 argStr = argStr + attribute_name + "=" + repr(attribute_obj.__get__(self)) + ", "
         argStr = argStr.rstrip(", ")
@@ -556,7 +559,7 @@ sys.exit(ret)""".format(
 
         # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
         filtered_data_dict = {}
-        for key, value in data_dict.items():
+        for key, value in list(data_dict.items()):
             if value is not None:
                 filtered_data_dict[key] = value
 
@@ -572,7 +575,7 @@ sys.exit(ret)""".format(
         # know what some custom task definitions might want it for.
         if sgtk:
             if sgtk in filtered_data_dict:
-                print "Warning: 'sgtk' in Task data but being overwritten by a SGTK project configuration instance"
+                print("Warning: 'sgtk' in Task data but being overwritten by a SGTK project configuration instance")
             filtered_data_dict["sgtk"] = sgtk
 
         obj = cls(**filtered_data_dict)

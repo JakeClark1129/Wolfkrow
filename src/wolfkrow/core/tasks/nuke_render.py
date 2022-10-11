@@ -1,6 +1,9 @@
 """ Module implementing a nuke render task.
 """
+from __future__ import print_function
 
+from builtins import range
+from past.builtins import basestring
 import errno
 import logging
 import os
@@ -49,7 +52,7 @@ class NukeRender(NukeTask):
     destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
     file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
     bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
-    codec = TaskAttribute(default_value=8, configurable=True, attribute_options=range(0, 13), attribute_type=int, 
+    codec = TaskAttribute(default_value=8, configurable=True, attribute_options=list(range(0, 13)), attribute_type=int, 
         description="""
     Which Codec to render the quicktime with.
         0 - Apple ProRes 4444 XQ
@@ -296,9 +299,9 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
         # No acceptable top_node found. don't connect anything.
         if top_node is None:
-            print("Supplied nuke script '{nuke_script}' contains no acceptable top node. Skipping.").format(
+            print("Supplied nuke script '{nuke_script}' contains no acceptable top node. Skipping.".format(
                 nuke_script=script
-            )
+            ))
             return current_bottom_node
 
         # Connect the current_bottom_node to the new scripts top_node. 
@@ -329,7 +332,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 value_dict (dict): Dictionary of knob names, and the value to set.
         """
 
-        for key, value in value_dict.items():
+        for key, value in list(value_dict.items()):
             if key in node.knobs():
                 failed = False
                 try:

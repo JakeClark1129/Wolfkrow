@@ -1,3 +1,4 @@
+from __future__ import print_function
 from wolfkrow.core.tasks import task, sequence_task
 from wolfkrow.core.engine import task_graph
 from . import task_exceptions

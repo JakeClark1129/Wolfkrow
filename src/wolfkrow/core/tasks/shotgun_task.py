@@ -55,7 +55,7 @@ class ShotgunTask(Task):
                 TaskValidationException: ShotgunTask task is not properly initialized
         """
 
-        for attr_name, attr in self.task_attributes.items():
+        for attr_name, attr in list(self.task_attributes.items()):
             if attr.required is True and getattr(self, attr_name) is None:
                 
                 raise TaskValidationException("Required argument {arg} not supplied.".format(

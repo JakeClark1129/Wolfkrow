@@ -2,7 +2,9 @@
 
     Author: Jacob Clark
 """
+from __future__ import print_function
 
+from builtins import object
 import copy
 import logging
 import networkx
@@ -128,7 +130,7 @@ class TaskGraph(object):
 
         # Create a copy of the tasks dictionary.
         tasks = copy.copy(self._tasks)
-        for task in tasks.values():
+        for task in list(tasks.values()):
 
             # Export scripts for task.
             exported = task.export(
@@ -164,7 +166,7 @@ class TaskGraph(object):
 
                 # Search the task graph for tasks which dependend on the original 
                 # task, and update them to depend on the new tasks.
-                for task2 in self._tasks.values():
+                for task2 in list(self._tasks.values()):
                     # Do not add a dependency to yourself.
                     if task2.name == task.name:
                         continue
@@ -231,7 +233,7 @@ class TaskGraph(object):
             if task['executable_args']:
                 args.extend(task['executable_args'])
             if task.get("script") and task['script'] is not None:
-                script_args = filter(lambda x: bool(x), task['script'].split(' '))
+                script_args = [x for x in task['script'].split(' ') if bool(x)]
                 args.extend(script_args)
 
             #TODO: The python script being executed here can be a security liability 
@@ -277,7 +279,7 @@ class TaskGraph(object):
 
         # Iterate over and add the attributes from the extra job attributes setting.
         job_attributes_setting = self._settings["deadline"].get("extra_job_attributes", {})
-        for attr_key, attr_value in job_attributes_setting.items():
+        for attr_key, attr_value in list(job_attributes_setting.items()):
             # replace replacements in the attr value:
             if replacements:
                 attr_value_replaced = utils.replace_replacements(
@@ -370,7 +372,7 @@ class TaskGraph(object):
 
             # Add Environment variables.
             var_index = 0
-            for key, value in environment_dict.items():
+            for key, value in list(environment_dict.items()):
                 job_attrs['EnvironmentKeyValue%s' % var_index] = "%s=%s" % (key, value)
                 var_index += 1
 
@@ -388,7 +390,7 @@ class TaskGraph(object):
 
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
             if isinstance(job, str):
-                print "Failed to submit job. {}".format(job)
+                print("Failed to submit job. {}".format(job))
             else:
                 print("Job: {} - {}".format(job.get("Name"), job["_id"]))
             return job

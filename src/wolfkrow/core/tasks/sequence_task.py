@@ -67,7 +67,7 @@ class SequenceTask(Task):
             self.temp_dir = temp_dir
 
         arg_str = ""
-        for attribute_name, attribute_obj  in self.task_attributes.items():
+        for attribute_name, attribute_obj  in list(self.task_attributes.items()):
             if attribute_obj.serialize is False:
                 continue
 
