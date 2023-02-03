@@ -4,10 +4,11 @@ deadline:
   default_group: 8cores
   default_pool: bundle
   default_limits: 
+  default_limit_groups:
 
   task_overrides:
     NukeRender:
-      limits: [nuke]
+      limit_groups: [nuke]
 
   extra_job_attributes:
     ExtraInfo0: "$SHOW"
