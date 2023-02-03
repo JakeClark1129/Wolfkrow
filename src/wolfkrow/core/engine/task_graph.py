@@ -274,6 +274,7 @@ class TaskGraph(object):
         job_attrs = {
             "Group": self._settings["deadline"]["default_group"],
             "Limits": self._settings["deadline"]["default_limits"],
+            "LimitGroups": self._settings["deadline"]["default_limit_groups"],
             "Pool": self._settings["deadline"]["default_pool"],
         }
 
@@ -298,6 +299,8 @@ class TaskGraph(object):
                 job_attrs["Limits"] = task_overrides["limits"]
             if "pool" in task_overrides:
                 job_attrs["Pool"] = task_overrides["pool"]
+            if "limit_groups" in task_overrides:
+                job_attrs["LimitGroups"] = task_overrides["limit_groups"]
 
         return job_attrs 
 
