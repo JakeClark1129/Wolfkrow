@@ -190,6 +190,13 @@ class TaskGraph(object):
                         "script": None,
                         "obj": exported_task[0],
                     }
+                elif export_type == "BashScript":
+                    exported_tasks[exported_task[0].name] = {
+                        "executable": "bash",
+                        "executable_args": None,
+                        "script": exported_task[1],
+                        "obj": exported_task[0],
+                    }
                 elif export_type == "PythonScript":
                     exported_tasks[exported_task[0].name] = {
                     "executable": task.python_script_executable,
@@ -197,6 +204,8 @@ class TaskGraph(object):
                     "script": exported_task[1],
                     "obj": exported_task[0],
                 }
+                else:
+                    raise TaskGraphException("Unknown Export Type! Received: {}".format(export_type))
 
         return exported_tasks
 

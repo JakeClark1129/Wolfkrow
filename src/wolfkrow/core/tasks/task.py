@@ -325,6 +325,45 @@ on the farm."""
 
         raise NotImplementedError("run method must be overridden by child class")
 
+    def _get_script_path(self, extension, job_name=None, temp_dir=None):
+        """ Helper method for generating a script name for script export methods.
+
+        Args:
+            job_name (str): Human readable token to be used as part of the file name.
+            extension (str): The extension of the filepath to create.
+        
+        Kwargs:
+            temp_dir (str):  temp directory to generate the script path to.
+        """
+
+        def sub_space_for_underscore(string):
+            return string.strip().replace(" ", "_")
+
+        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if job_name:
+            script_name = "{time}_{job_name}_{task_name}.{extension}".format(
+                time=now,
+                job_name=sub_space_for_underscore(job_name),
+                task_name=sub_space_for_underscore(self.name),
+                extension=extension,
+            )
+        else:
+            script_name = "{time}_{task_name}.{extension}".format(
+                time=now,
+                task_name=sub_space_for_underscore(self.name),
+                extension=extension,
+            )
+
+
+        if self.temp_dir is None:
+            self.temp_dir = temp_dir
+
+        temp_dir = temp_dir or self.temp_dir
+
+        file_path = os.path.join(temp_dir, script_name)
+
+        return file_path
+
 
     def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in order to 
@@ -359,10 +398,23 @@ on the farm."""
 
                 value = repr(value)
 
+            # Sometimes the value here will be a unicode or byte string. If that
+            # is the case, then strip the "u" or "b" qualifier at the start of 
+            # the string output of repr.
+            # TODO: We should probably properly handle these special cases properly,
+            # but this seems to work... keep an eye on this.
+            value = repr(value)
+            try:
+                if value.startswith("u'") or value.startswith("b'"):
+                    value = value[1:]
+            except Exception:
+                pass
+
+            # Now put together the arg string
             arg_str = "{arg_str} --{attribute_name} {value}".format(
                 arg_str=arg_str,
                 attribute_name=attribute_name,
-                value=repr(value)
+                value=value
             )
 
 
@@ -374,6 +426,43 @@ on the farm."""
         )
 
         return [(self, command)]
+
+    def export_to_bash_script(self, job_name, temp_dir=None, deadline=False):
+        command_line_export = self.export_to_command_line(
+            temp_dir=temp_dir, 
+            deadline=deadline
+        )
+
+        bash_script_exports = []
+        for export in command_line_export:
+            bash_script_template ="""
+#!/usr/bin/env bash
+
+{command}
+"""
+            bash_script = bash_script_template.format(command=export[1])
+            
+            bash_script_path = self._get_script_path(
+                extension="sh", 
+                job_name=job_name,
+                temp_dir=temp_dir
+            )
+
+            with open(bash_script_path, 'w') as handle:
+                handle.write(bash_script)
+
+            # Ensure that the script is readonly for the person exporting. This 
+            # is due to a security vulnerability due to some Task types containing 
+            # sensitive data. Such as the SG tasks which may contain api keys or
+            # auth tokens.
+            # We also want to prevent write access to prevent someone modifying 
+            # the script between creation and execution.
+            # TODO: ensure this also works on Windows.
+            os.chmod(bash_script_path, 0o500) # Sets "r-x------" permissions
+
+            bash_script_exports.append((self, bash_script_path))
+
+        return bash_script_exports
 
     def export_to_python_script(self, job_name, temp_dir=None):
         """ Will Export this task into a stand alone python script in order to run this task later. 
@@ -396,22 +485,11 @@ on the farm."""
         if self.python_script_executable is None:
             raise TaskException("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE variable undefined and no executable specified.")
 
-        def sub_space_for_underscore(string):
-            return string.strip().replace(" ", "_")
-
-        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        script_name = "{time}_{job_name}_{task_name}.py".format(
-            time=now,
-            job_name=sub_space_for_underscore(job_name),
-            task_name=sub_space_for_underscore(self.name)
+        file_path = self._get_script_path(
+            extension="py",
+            job_name=job_name,
+            temp_dir=temp_dir
         )
-
-        if self.temp_dir is None:
-            self.temp_dir = temp_dir
-
-        temp_dir = temp_dir or self.temp_dir
-
-        file_path = os.path.join(temp_dir, script_name)
 
         obj_str = repr(self)
         contents = """
@@ -469,6 +547,8 @@ sys.exit(ret)""".format(
         # Export the parent task.
         if export_type == "CommandLine":
             exported_tasks.extend(self.export_to_command_line(temp_dir=temp_dir, deadline=deadline))
+        if export_type == "BashScript":
+            exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=temp_dir))
 

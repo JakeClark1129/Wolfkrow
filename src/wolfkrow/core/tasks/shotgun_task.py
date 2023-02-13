@@ -25,7 +25,28 @@ class ShotgunTask(Task):
         default_value=None,
         required=False,
         configurable=False,
-        description="Serialized authenticated user to be deserialized on the farm.")
+        description="Serialized authenticated user to be deserialized on the farm. Deprecated, Please use user name, and auth token instead.")
+
+    user_name = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="User name of user to authenticate with"
+    )
+
+    auth_token = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="The Auth token to use for the user."
+    )
+
+    session_metadata = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="Metadata for the users session."
+    )
 
     script_name = TaskAttribute(
         default_value=None,
@@ -65,7 +86,20 @@ class ShotgunTask(Task):
     def setup(self):
         """ Sets up shotgun connection to be used later in the run method.
         """
-        if self.authenticated_user is not None:
+
+        if self.user_name and self.auth_token and self.session_metadata:
+            import sgtk
+            authenticator = sgtk.authentication.ShotgunAuthenticator()
+
+            user = authenticator.create_session_user(
+                login=self.user_name,
+                session_token=self.auth_token,
+                host=self.shotgun_site,
+                session_metadata=self.session_metadata
+            )
+            self._sg = user.create_sg_connection()
+
+        elif self.authenticated_user is not None:
             # in some cases, the '\n' character will be interpreted as '\\n' (backslash, 
             # and an n). Fix that here.
             self.authenticated_user = self.authenticated_user.replace("\\n", "\n")
@@ -73,7 +107,7 @@ class ShotgunTask(Task):
             import sgtk
             user = sgtk.authentication.deserialize_user(self.authenticated_user)
             self._sg = user.create_sg_connection()
-        else:
+        elif self.script_name and self.api_key:
             import shotgun_api3
             self._sg = shotgun_api3.Shotgun(
                 self.shotgun_site, 
