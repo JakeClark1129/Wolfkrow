@@ -18,13 +18,13 @@ class NukeTask(Task):
         """ Will generate a `wolfkrow_run_task` command line command to run in 
             order to re-construct and run this task via command line. 
 
-            Appends a '--' to the end of the command because nuke will try to accept
+            Appends a '$' to the end of the command because nuke will try to accept
             the last arguments as a frame number/range.
         """
         exported = super(NukeTask, self).export_to_command_line(deadline=deadline)
 
         updated_exported = []
-        # Append a "--" to the end of the command so that nuke does not consume 
+        # Append a "$" to the end of the command so that nuke does not consume 
         # the last argument as a frame number/range.
         for export in exported:
             obj, command = export

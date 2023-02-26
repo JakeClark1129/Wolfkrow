@@ -8,8 +8,9 @@ import shutil
 from wolfkrow.core.tasks.task import Task, TaskAttribute
 from wolfkrow.core.tasks.file_operation import FileOperation
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
+from wolfkrow.core.tasks.sequence_task import SequenceTask
 
-class CommandLine(Task):
+class CommandLine(SequenceTask):
     """ Allows execution of arbitrary command line scripts.
 
         Note: Allowing execution of command line scripts this way has some 
@@ -31,6 +32,10 @@ class CommandLine(Task):
         TODO: What are some potential solutions to the security issues with this?
             1) Have an WOLFKROW_WHITELIST_SCRIPTS environment variable (or config 
                 entry) which whitelists scripts that are allowed to be executed.
+
+        To execute this as a sequence task, include {start_frame} and {end_frame}
+        string tokens as part of the args list. The export will then substitute 
+        the start and end frame attributes for their corresponding tokens.
     """
 
     script = TaskAttribute(required=True, description="The Command to run on the command line.")
@@ -49,6 +54,16 @@ class CommandLine(Task):
             script=self.script, 
             script_args=arg_str
         )
+
+        if self.start_frame and self.end_frame:
+            start_frame = self._command_line_sanitize_attribute("start_frame", self.start_frame, deadline=deadline)
+            end_frame = self._command_line_sanitize_attribute("end_frame", self.end_frame, deadline=deadline)
+            try:
+                command = command.format(start_frame=start_frame, end_frame=end_frame)
+            except IndexError as e:
+                pass
+            except KeyError as e:
+                pass
 
         return [(self, command)]
 
