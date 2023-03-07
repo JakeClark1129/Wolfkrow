@@ -144,10 +144,10 @@ class Loader(object):
             task_data = copy.deepcopy(default_task_data)
             task_data.update(configured_task_data)
 
-            task_obj = tasks.all_tasks.get(task_data['task_type'])
+            task_type = task_data['task_type']
+            task_obj = tasks.all_tasks.get(task_type)
             if task_obj is None:
-                #TODO: Warn about missing task definition but still continue without the task.
-                continue
+                print("Warning: Task type '{task_type}' is undefined. Ignoring...".format(task_type=task_type))
 
             task_data['name'] = task_name
             task_data['config'] = self.config
@@ -179,24 +179,21 @@ class Loader(object):
         if workflow_tasks is None:
             raise Exception("Unable to find workflow '{}'".format(workflow_name))
 
-        #TODO: Add extra validation for the config file. (ensure tasks requested 
-        # in the workflow section are defined in the tasks section)
         for task_name in workflow_tasks:
 
             # Get default task data dictionary
             configured_task_data = self.config['tasks'].get(task_name)
             if not configured_task_data:
-                #TODO: Warn about missing task definition but still continue without the task.
-                continue
+                print("Warning: Task '{task_name}' is undefined. Ignoring...".format(task_name=task_name))
 
             default_task_data = self.get_default_task_data(configured_task_data['task_type'])
             task_data = copy.deepcopy(default_task_data)
             task_data.update(configured_task_data)
 
-            task_obj = tasks.all_tasks.get(configured_task_data['task_type'])
+            task_type = configured_task_data['task_type']
+            task_obj = tasks.all_tasks.get(task_type)
             if task_obj is None:
-                #TODO: Warn about missing task definition but still continue without the task.
-                continue
+                print("Warning: Task type '{task_type}' is undefined. Ignoring...".format(task_type=task_type))
 
             task_data['name'] = task_name
             task_data['config'] = self.config
