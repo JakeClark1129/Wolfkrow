@@ -310,10 +310,6 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         for node in selected_nodes:
             node.setSelected(False)
 
-        if isinstance(script, dict):
-
-        else:
-
         if not os.path.exists(script):
             print("Supplied nuke script '{nuke_script}' does not exist. Skipping...".format(
                     nuke_script=script
