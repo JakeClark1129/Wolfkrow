@@ -245,6 +245,56 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # This node does not have any acceptable top_node nodes
         return None
 
+    def _append_nuke_node(self, node_dict, current_bottom_node):
+        """ Will attach the supplied nuke node to the current_bottom_node.
+
+            Args: 
+                node_dict (dict): Dictionary containing information about what 
+                    node to create, and knob values to set.
+                current_bottom_node (Node): The node to attach the script to. 
+                    Should be the bottom of the current nuke script.
+        """
+        import nuke
+
+        for node_name, node_dict_ in node_dict.items():
+            node_type = node_dict_.get("node_type")
+
+            # Remove the node_type so it doesn't get added to the tcl_list because it is not a valid knob name.
+            del node_dict_["node_type"]
+            if not node_type:
+                print("Warning: attribute 'node_type' required. Received: {}".format(node_dict_))
+
+            tcl_list = []
+            for key, value in node_dict_.items():
+                tcl_list.append(str(key))
+                value = str(value)
+                # If there is a space in the value, then we must wrap the value 
+                # in quotes so it doesn't get confused as an extra knob name/value
+                if " " in value:
+                    value = '"' + value + '"'
+                tcl_list.append(str(value))
+
+            tcl_list_str = " ".join(tcl_list)
+
+
+            nuke_node = nuke.createNode(node_type, tcl_list_str)
+            nuke_node.setName(node_name)
+
+            # Connect the current_bottom_node to the new scripts top_node. 
+            # current_bottom_node will be None for an empty nuke script
+            if current_bottom_node is not None:
+                nuke_node.setInput(0, current_bottom_node)
+
+            # We are receiving a dictionary with a single entry which is another 
+            # dictionary which contains the node knob values we want. Breaking 
+            # the iteration immediately to make it clear this dict should NEVER
+            # contain more than one entry. (Especially since dict's are un-ordered)
+            break
+
+        # return the node we just created as the new bottom node
+        return nuke_node
+
+
     def _append_nuke_script(self, script, current_bottom_node):
         """ Will attach the supplied nuke script to the current_bottom_node.
 
@@ -259,6 +309,10 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         selected_nodes = nuke.selectedNodes()
         for node in selected_nodes:
             node.setSelected(False)
+
+        if isinstance(script, dict):
+
+        else:
 
         if not os.path.exists(script):
             print("Supplied nuke script '{nuke_script}' does not exist. Skipping...".format(
@@ -289,11 +343,11 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         if bottom_node is not None:
             top_node.setName("bottom_1")
 
-        # Node indicating the bottom node was not found. Use slightly more intelligent ways to determing the bottom_node
+        # Node indicating the bottom node was not found. Use slightly more intelligent ways to determine the bottom_node
         if bottom_node is None:
             bottom_node = self._find_bottom_node(top_node or random_node)
 
-        # Node indicating the top node was not found. Use slightly more intelligent ways to determing the top_node
+        # Node indicating the top node was not found. Use slightly more intelligent ways to determine the top_node
         if top_node is None:
             top_node = self._find_top_node(bottom_node)
 
@@ -314,13 +368,16 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
     def _concatenate_nuke_scripts(self):
         current_bottom_node = None
         for script in self.scripts:
-            _, ext = os.path.splitext(script)
-            if ext == ".py":
-                # TODO: execute python scripts (HOW???) Look into pyscript_knob
-                # https://learn.foundry.com/nuke/developers/70/pythonreference/
-                pass
-            elif ext == ".nk":
-                current_bottom_node = self._append_nuke_script(script, current_bottom_node)
+            if isinstance(script, dict):
+                self._append_nuke_node(script, current_bottom_node)
+            else:
+                _, ext = os.path.splitext(script)
+                if ext == ".py":
+                    # TODO: execute python scripts (HOW???) Look into pyscript_knob
+                    # https://learn.foundry.com/nuke/developers/70/pythonreference/
+                    pass
+                elif ext == ".nk":
+                    current_bottom_node = self._append_nuke_script(script, current_bottom_node)
         return current_bottom_node
 
     def set_node_knob_values_from_dict(self, node, value_dict):
@@ -471,6 +528,15 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                                 import traceback
                                 traceback.print_exc()
                                 print("Warning: Unable to substitute expression knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(node, knob, knob_value, new_knob_value))
+
+        script_dir = os.path.dirname(script_path)
+        if not os.path.exists(script_dir):
+            try:
+                os.path.makedirs(script_dir)
+            except OSError as error:
+                if error.errno != errno.EEXIST:
+                    raise
+
         nuke.scriptSaveAs(script_path, overwrite=1)
         return 0
 

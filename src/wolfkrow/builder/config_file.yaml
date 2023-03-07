@@ -51,7 +51,10 @@ tasks:
       task_type: NukeRender
       dependencies: [CR2_Convert, Export_Cutref]
       scripts:
-         - /shows/tp_shotgun/tools/image_tools/snippets/reformat_to_UHD.nk
+         - reformat_to_uhd:
+            node_type: Reformat
+            width: 3840
+            height: 2160
       source: "{file_publish_path}"
       destination: "{publish_version_path}"
       file_type: "mov"
