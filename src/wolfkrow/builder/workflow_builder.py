@@ -105,6 +105,12 @@ class Loader(object):
     def _load_configs(self, config_file_paths):
         config = {}
         for config_file in config_file_paths:
+
+            # Check that the config file exists before loading it.
+            if not os.path.exists(config_file):
+                print("Warning: Wolfkrow config file {} was not found.".format(config_file))
+                continue
+
             with open(config_file, "r") as handle:
                 file_contents = handle.read()
 
