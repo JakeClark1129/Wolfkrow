@@ -281,10 +281,10 @@ class TaskGraph(object):
         """
 
         job_attrs = {
-            "Group": self._settings["deadline"]["default_group"],
-            "Limits": self._settings["deadline"]["default_limits"],
-            "LimitGroups": self._settings["deadline"]["default_limit_groups"],
-            "Pool": self._settings["deadline"]["default_pool"],
+            "Group": self._settings["deadline"].get("default_group"),
+            "Limits": self._settings["deadline"].get("default_limits"),
+            "LimitGroups": self._settings["deadline"].get("default_limit_groups"),
+            "Pool": self._settings["deadline"].get("default_pool"),
         }
 
         # Iterate over and add the attributes from the extra job attributes setting.

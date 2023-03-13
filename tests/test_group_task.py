@@ -54,5 +54,5 @@ def test_GroupTask_export_python_script():
     logging.info("Group Task file contents:")
     logging.info(contents)
 
-test_GroupTask_export_command_line()
-test_GroupTask_export_python_script()
+# test_GroupTask_export_command_line()
+# test_GroupTask_export_python_script()

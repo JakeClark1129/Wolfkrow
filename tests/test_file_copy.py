@@ -34,4 +34,4 @@ def test_file_copy_sequence():
             logging.info("TEST 'test_taskGraphExecuteSuccess' FAILED")
     logging.info("======================================\n\n")
 
-test_file_copy_sequence()
+# test_file_copy_sequence()

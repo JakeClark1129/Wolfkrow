@@ -40,5 +40,5 @@ def test_default_task_attributes():
     else: 
         logging.info("TEST 'default_task_attributes' FAILED")
 
-test_loader()
-test_default_task_attributes()
+# test_loader()
+# test_default_task_attributes()

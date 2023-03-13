@@ -27,4 +27,4 @@ def test_replacements():
         logging.info("TEST 'test_taskGraphExecuteSuccess' FAILED")
     logging.info("===========================================\n\n")
 
-test_replacements()
+#test_replacements()

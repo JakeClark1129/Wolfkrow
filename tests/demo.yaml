@@ -1,0 +1,71 @@
+task_attribute_defaults:
+  NukeRender:
+    executable: "nuke"
+    executable_args: "-t"
+
+replacements:
+  new_name: moved
+  temp_tiff_location: "C:\\temp\\tiffs"
+
+tasks:
+  copy_source:
+    task_type: FileCopy
+    dependencies:
+    hard_dependencies: 
+    source: "{input_files}"
+    destination: "{temp_tiff_location}\\{input_files_basename}.%04d.tiff"
+  process_comp_exrs: 
+    task_type: NukeRender
+    dependencies:
+    source: "{input_files}"
+    destination: "{temp_tiff_location}\\{input_files_basename}.%04d.tiff"
+    scripts: 
+      - C:\demo\reformat_to_HD.nk
+      - C:\demo\burnins.nk
+      - C:\demo\apply_grade.nk
+      - C:\demo\apply_client_lut.nk
+    start_frame: "{start_frame}"
+    end_frame: "{end_frame}"
+    file_type: exr
+    bit_depth: 16 bit
+    compression: 8 # dwaa
+  generate_quicktime_DNxHD: 
+    task_type: NukeRender
+    dependencies:
+    source: "{temp_tiff_location}\\{input_files_basename}.%04d.tiff"
+    destination: "C:\\temp\\final\\{input_files_basename}.mov"
+    scripts: 
+    start_frame: "{start_frame}"
+    end_frame: "{end_frame}"
+    file_type: mov
+    codec: 5 # DNxHD
+  generate_quicktime_h264: 
+    task_type: NukeRender
+    dependencies:
+    source: "{temp_tiff_location}\\{input_files_basename}.%04d.tiff"
+    destination: "C:\\temp\\final\\{input_files_basename}.mov"
+    scripts: 
+    start_frame: "{start_frame}"
+    end_frame: "{end_frame}"
+    file_type: mov
+    codec: 7 # H264
+
+  update_status:
+    task_type: 
+    shotgun_id: {shotgun_id}
+
+
+
+
+workflows:
+  demo_workflow:
+    - copy_source
+
+
+  demo_client_delivery_processing:
+    - publish_shotgun
+    - update_status
+    - process_comp_exrs
+    - generate_quicktime_DNxHD
+    - generate_quicktime_h264
+  

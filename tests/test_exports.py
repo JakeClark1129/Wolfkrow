@@ -86,5 +86,5 @@ def test_BashScript_export_subtasks():
             logging.info("TEST 'test_BashScript_export_subtasks' FAILED")
     logging.info("===========================================\n\n")
 
-test_BashScript_export()
-test_BashScript_export_subtasks()
+# test_BashScript_export()
+# test_BashScript_export_subtasks()
