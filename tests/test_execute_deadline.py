@@ -1,6 +1,5 @@
 import logging
 import os
-import traceback
 
 import unittest
 
@@ -12,11 +11,10 @@ from wolfkrow.core.tasks import task_exceptions
 from wolfkrow.core.tasks.test_tasks import *
 from wolfkrow.core import utils
 
+# TODO: These tests rely on deadline API. We should try and get API stubs in place
+# so we don't need to actually submit jobs to the farm.
 class TestExecuteDeadline(unittest.TestCase):
     def test_taskGraphExecuteSuccess(self):
-        # logging.info("===========================================")
-        # logging.info("RUNNING TEST 'test_taskGraphExecuteSuccess'")
-        # logging.info("===========================================")
         job = task_graph.TaskGraph("taskGraphExecuteSuccess")
         t1 = TestTask_Successful(name="Task1", dependencies=[], replacements={})
         t2 = TestTask_Successful(name="Task2", dependencies=["Task1"], replacements={})
@@ -28,26 +26,10 @@ class TestExecuteDeadline(unittest.TestCase):
         job.add_task(t3)
         job.add_task(t4)
         job.add_task(t5)
-        
-        try: 
-            job.execute_deadline()
-            error = False
-        except Exception:
-            traceback.print_exc()
-            error = True
-        finally:
-            if not error:
-                # logging.info("TEST 'test_taskGraphExecuteSuccess' SUCCESSFUL")
-                pass
-            else:
-                # logging.info("TEST 'test_ktaskGraphExecuteSuccess' FAILED")
-                pass
-        # logging.info("===========================================\n\n")
+
+        job.execute_deadline()
 
     def test_get_additional_job_attrs(self):
-        # logging.info("============================================")
-        # logging.info("RUNNING TEST 'test_get_additional_job_attrs'")
-        # logging.info("============================================")
         settings_file = os.path.join(os.path.dirname(__file__), "test_settings.yaml")
         job = task_graph.TaskGraph(
             "taskGraphExecuteSuccess",
@@ -68,27 +50,12 @@ class TestExecuteDeadline(unittest.TestCase):
             "ExtraInfo2": "/shows/foobar",
             "UserName": "test_user",
         }
-        
-        success = True
-        for attr_key, attr_value in list(sample_attrs.items()):
-            if attr_key not in test_attrs:
-                success = False
-                break
-            if attr_value != test_attrs[attr_key]:
-                success = False
-                break
 
-        if success:
-            # logging.info("TEST 'test_get_additional_job_attrs' SUCCESSFUL")
-            pass
-        else:
-            pass
-        #     logging.info("Test attrs: ")
-        #     logging.info(test_attrs)
-        #     logging.info("Sample attrs: ")
-        #     logging.info(sample_attrs)
-        #     logging.info("TEST 'test_get_additional_job_attrs' FAILED")
-        # logging.info("============================================\n\n")
+        for attr_key, attr_value in list(sample_attrs.items()):
+            self.assertIn(attr_key, test_attrs)
+
+            self.assertEqual(attr_value, test_attrs[attr_key])
+
 if __name__ == "__main__":
     unittest.main()
 

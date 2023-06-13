@@ -1,58 +1,58 @@
 from builtins import str
 import logging
 import os
-import traceback
+import unittest
 
 logging.basicConfig(level=logging.DEBUG)
 
-from wolfkrow.core.tasks import task, sequence_task, task_exceptions
-from wolfkrow.core.engine import task_graph
 from wolfkrow.core.tasks.test_tasks import *
 from wolfkrow import Loader
 
-#TODO: Turn these into real unit tests.
-def test_GroupTask_export_command_line():
-    logging.info("=================================================")
-    logging.info("RUNNING TEST 'test_GroupTask_export_command_line'")
-    logging.info("=================================================")
+from .wolfkrow_testcase import WolfkrowTestCase
 
-    loader = Loader(
-        config_file_paths=[r"C:\Projects\Wolfkrow\tests\test_group_task.wolfkrow.yaml"]
-    )
-    task_graph = loader.parse_workflow("Group_Test")
+class TestGroupTask(WolfkrowTestCase):
 
-    exported_tasks = task_graph.export_tasks("CommandLine")
+    def test_GroupTask_export_command_line(self):
+        """ Tests that the group task is exported correctly.
+        """
 
-    logging.info("Exported Tasks: " + str(exported_tasks))
+        config_path = self.get_test_config_file("test_group_task.wolfkrow.yaml")
+        loader = Loader(
+            config_file_paths=[config_path]
+        )
+        task_graph = loader.parse_workflow("Group_Test")
 
-    with open(exported_tasks["Group_Test"]["executable_args"][0], 'r') as fh:
-        contents = fh.read()
-    
-    logging.info("Group Task file contents:")
-    logging.info(contents)
+        exported_tasks = task_graph.export_tasks("CommandLine")
 
-def test_GroupTask_export_python_script():
-    logging.info("==================================================")
-    logging.info("RUNNING TEST 'test_GroupTask_export_python_script'")
-    logging.info("==================================================")
+        with open(exported_tasks["Group_Test"]["executable_args"][0], 'r') as fh:
+            contents = fh.read()
+        
+        # TODO: assert that the contents equals what we expected it to. 
+        # logging.info("Group Task file contents:")
+        # logging.info(contents)
 
-    # TODO: We need a better way of setting this in the settings.
-    os.environ["WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE"] = "python"
+    def test_GroupTask_export_python_script(self):
 
-    loader = Loader(
-        config_file_paths=[r"C:\Projects\Wolfkrow\tests\test_group_task.wolfkrow.yaml"]
-    )
-    task_graph = loader.parse_workflow("Group_Test")
+        
+        # TODO: We need a better way of setting this in the settings.
+        os.environ["WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE"] = "python"
 
-    exported_tasks = task_graph.export_tasks("PythonScript")
+        config_path = self.get_test_config_file("test_group_task.wolfkrow.yaml")
+        loader = Loader(
+            config_file_paths=[config_path]
+        )
+        task_graph = loader.parse_workflow("Group_Test")
 
-    logging.info("Exported Tasks: " + str(exported_tasks))
+        exported_tasks = task_graph.export_tasks("PythonScript")
 
-    with open(exported_tasks["Group_Test"]["script"], 'r') as fh:
-        contents = fh.read()
+        logging.info("Exported Tasks: " + str(exported_tasks))
 
-    logging.info("Group Task file contents:")
-    logging.info(contents)
+        with open(exported_tasks["Group_Test"]["script"], 'r') as fh:
+            contents = fh.read()
 
-# test_GroupTask_export_command_line()
-# test_GroupTask_export_python_script()
+        # TODO: assert that the contents equals what we expected it to.
+        # logging.info("Group Task file contents:")
+        # logging.info(contents)
+
+if __name__ == "__main__":
+    unittest.main()

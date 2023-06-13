@@ -224,11 +224,10 @@ class Task(with_metaclass(TaskType, object)):
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
     config_files = TaskAttribute(
-        default_value={}, 
-        configurable=False, 
-        attribute_type=list, 
-        description="""List of config files used to reconstruct the Loader object 
-on the farm."""
+        default_value=[],
+        configurable=False,
+        attribute_type=list,
+        description="""List of config files used to reconstruct the Loader object on the farm."""
     )
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
@@ -417,7 +416,7 @@ on the farm."""
             if value is None or value == attribute_obj.default_value:
                 continue
 
-            value = self._command_line_sanitize_attribute(attribute_name, attribute_obj, deadline=deadline)
+            value = self._command_line_sanitize_attribute(attribute_name, value, deadline=deadline)
 
             # Now put together the arg string
             arg_str = "{arg_str} --{attribute_name} {value}".format(
@@ -576,7 +575,7 @@ sys.exit(ret)""".format(
         self.validate()
 
         # Assign the temp_dir variable so that the tempdir is available after submission.
-        if temp_dir:
+        if self.temp_dir is None:
             self.temp_dir = temp_dir
 
         exported_tasks = []

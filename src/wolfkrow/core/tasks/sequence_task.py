@@ -235,8 +235,6 @@ class SequenceTask(Task):
                 (str) - The file path to the exported task.
         """
 
-        raise Exception("Gahh!")
-
         # We have a framed sequence task, so export the chunked tasks
         export_method_name = "export_to_python_script"
         export_method_args = {

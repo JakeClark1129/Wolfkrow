@@ -2,6 +2,7 @@ from __future__ import print_function
 from builtins import str
 from builtins import range
 from builtins import object
+from past.builtins import basestring
 import os
 import re
 import string

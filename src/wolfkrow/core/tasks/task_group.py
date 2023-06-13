@@ -151,8 +151,16 @@ class TaskGroup(Task):
         # NOTE: Tasks will get executed in the order that they are exported in.
         exported_tasks = []
         for task in tasks_to_export:
-            if isinstance(task, SequenceTask):
-                raise TaskValidationException("Cannot group Sequence tasks.")
+            # We cannot group tasks which are sequence tasks due to the way that 
+            # they get run on deadline. They rely on a "<STARTFRAME>" and "<ENDFRAME>"
+            # token which gets passed into the same task arg list multiple times.
+            # This goes against the very nature of the group tasks, because the 
+            # task should only be run a single time.
+            # TODO: It may be possible to still get sequence tasks to work, but 
+            # we would need to disable chunking for the export, and sub the <STARTFRAME> 
+            # <ENDFRAME> tokens manually.
+            if deadline and isinstance(task, SequenceTask):
+                raise TaskValidationException("Cannot group Sequence tasks when executing on deadline.")
 
             exported_tasks_ = task.export(
                 export_type, 

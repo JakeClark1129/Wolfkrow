@@ -16,9 +16,17 @@ class ShotgunTask(Task):
 
     shotgun_site = TaskAttribute(
         default_value=None, 
-        required=True ,
+        required=True,
         configurable=False,
         description="The url to your shotgun site."
+    )
+
+    http_proxy = TaskAttribute(
+        default_value=None, 
+        required=False,
+        configurable=False,
+        attribute_type=str,
+        description="HTTP proxy server to reroute SG traffic through."
     )
 
     authenticated_user = TaskAttribute(
@@ -87,7 +95,7 @@ class ShotgunTask(Task):
         """ Sets up shotgun connection to be used later in the run method.
         """
 
-        if self.user_name and self.auth_token and self.session_metadata:
+        if self.user_name and self.auth_token:
             import sgtk
             authenticator = sgtk.authentication.ShotgunAuthenticator()
 
@@ -95,6 +103,7 @@ class ShotgunTask(Task):
                 login=self.user_name,
                 session_token=self.auth_token,
                 host=self.shotgun_site,
+                http_proxy=self.http_proxy,
                 session_metadata=self.session_metadata
             )
             self._sg = user.create_sg_connection()
