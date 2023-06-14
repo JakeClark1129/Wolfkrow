@@ -14,7 +14,7 @@ setup(
     package_data={'': ['core/settings.yaml', 'builder/config_file.yaml']},
     entry_points={
         'console_scripts': [
-            'wolfkrow_run_task=wolfkrow.core.engine.wolfkrow_run_task:main',
+            'wolfkrow_run_task=wolfkrow.scripts.wolfkrow_run_task:main',
         ],
     },
     package_dir={
