@@ -3,8 +3,10 @@ executables:
 
 task_attribute_defaults:
   NukeRender:
-    executable: "nuke"
-    executable_args: "-t"
+    command_line_executable: "nuke"
+    command_line_executable_args: ["-t"]
+    python_script_executable: "nuke"
+    python_script_executable_args: ["-t"]
 
 replacements:
   new_name: moved
@@ -15,21 +17,15 @@ tasks:
     dependencies:
     source: "{foo}"
     destination: "{new_name}"
-  rename_source:
-    task_type: FileMove
-    dependencies: 
-      - copy_source
-    source: C:\backups\config_file.yaml
-    destination: C:\backups\new_name.yaml
   test_nuke_render: 
     task_type: NukeRender
     dependencies:
-    source: C:\temp\test_sequence\seq.%04d.exr
-    destination: C:\temp\test_sequence_output\seq.%04d.tiff
+    source: "{test_data_root}/test_sequence/seq.%04d.exr"
+    destination: "{test_temp_root}/test_sequence_output/seq.%04d.tiff"
     scripts: 
-      - C:\temp\sample_1.nk
-      - C:\temp\sample_2.nk
-      - C:\temp\sample_3.nk
+      - "{test_data_root}/sample_1.nk"
+      - "{test_data_root}/sample_2.nk"
+      - "{test_data_root}/sample_3.nk"
     start_frame: 1
     end_frame: 24
     file_type: tiff

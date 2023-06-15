@@ -224,11 +224,10 @@ class Task(with_metaclass(TaskType, object)):
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
     config_files = TaskAttribute(
-        default_value={}, 
-        configurable=False, 
-        attribute_type=list, 
-        description="""List of config files used to reconstruct the Loader object 
-on the farm."""
+        default_value=[],
+        configurable=False,
+        attribute_type=list,
+        description="""List of config files used to reconstruct the Loader object on the farm."""
     )
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
@@ -325,6 +324,72 @@ on the farm."""
 
         raise NotImplementedError("run method must be overridden by child class")
 
+    def _get_script_path(self, extension, job_name=None, temp_dir=None):
+        """ Helper method for generating a script name for script export methods.
+
+        Args:
+            job_name (str): Human readable token to be used as part of the file name.
+            extension (str): The extension of the filepath to create.
+        
+        Kwargs:
+            temp_dir (str):  temp directory to generate the script path to.
+        """
+
+        def sub_space_for_underscore(string):
+            return string.strip().replace(" ", "_")
+
+        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if job_name:
+            script_name = "{time}_{job_name}_{task_name}.{extension}".format(
+                time=now,
+                job_name=sub_space_for_underscore(job_name),
+                task_name=sub_space_for_underscore(self.name),
+                extension=extension,
+            )
+        else:
+            script_name = "{time}_{task_name}.{extension}".format(
+                time=now,
+                task_name=sub_space_for_underscore(self.name),
+                extension=extension,
+            )
+
+
+        if self.temp_dir is None:
+            self.temp_dir = temp_dir
+
+        temp_dir = temp_dir or self.temp_dir
+
+        file_path = os.path.join(temp_dir, script_name)
+
+        return file_path
+
+    def _command_line_sanitize_attribute(self, attribute_name, attribute_value, deadline=False):
+        """ Processes the attribute value to prepare it for use on the command line.
+
+            Does additional processing to prepare the attribute for use on deadline.
+        """
+
+        # Ensure that these types are wrapped in quotes so they are interpreted 
+        # as a single argument.
+        if (isinstance(attribute_value, dict) or
+            isinstance(attribute_value, list) or
+            isinstance(attribute_value, set)):
+
+            attribute_value = repr(attribute_value)
+
+        # Sometimes the value here will be a unicode or byte string. If that
+        # is the case, then strip the "u" or "b" qualifier at the start of 
+        # the string output of repr.
+        # TODO: We should probably properly handle these special cases properly,
+        # but this seems to work... keep an eye on this.
+        attribute_value = repr(attribute_value)
+        try:
+            if attribute_value.startswith("u'") or attribute_value.startswith("b'"):
+                attribute_value = attribute_value[1:]
+        except Exception:
+            pass
+
+        return attribute_value
 
     def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in order to 
@@ -351,18 +416,13 @@ on the farm."""
             if value is None or value == attribute_obj.default_value:
                 continue
 
-            # Ensure that these types are wrapped in quotes so they are interpreted 
-            # as a single argument.
-            if (isinstance(value, dict) or
-                isinstance(value, list) or
-                isinstance(value, set)):
+            value = self._command_line_sanitize_attribute(attribute_name, value, deadline=deadline)
 
-                value = repr(value)
-
+            # Now put together the arg string
             arg_str = "{arg_str} --{attribute_name} {value}".format(
                 arg_str=arg_str,
                 attribute_name=attribute_name,
-                value=repr(value)
+                value=value
             )
 
 
@@ -375,7 +435,72 @@ on the farm."""
 
         return [(self, command)]
 
-    def export_to_python_script(self, job_name, temp_dir=None):
+    def _generate_bash_script_contents(self, temp_dir=None, deadline=False):
+        """ Generates the contents for a bash script export. Default implementation 
+        is just based off of the CommandLine export.
+
+        Kwargs:
+            temp_dir (str): temp directory to use for the command line export.
+            deadline (bool): whether or not to prepare this task for deadline.
+        """
+        command_line_export = self.export_to_command_line(
+            temp_dir=temp_dir, 
+            deadline=deadline
+        )
+
+        bash_scripts = []
+        bash_script_template ="""
+#!/usr/bin/env bash
+
+{command}
+"""
+        for export in command_line_export:
+
+            bash_script = bash_script_template.format(command=export[1])
+            bash_scripts.append((export[0], bash_script))
+        
+        return bash_scripts
+
+    def export_to_bash_script(self, job_name, temp_dir=None, deadline=False):
+        """ Uses the standard export to command line method, then writes that to 
+        a bash script.
+
+        Args:
+            job_name (str): name of the job this task is a part of. Only used in generation of the scripts name.
+
+        Kwargs:
+            temp_dir (str): temp directory to write the stand alone python script to.
+            deadline (bool): whether or not to prepare this task for deadline.
+        """
+
+        bash_scripts = self._generate_bash_script_contents(job_name, deadline=deadline)
+
+        bash_script_exports = []
+
+        for task, bash_script in bash_scripts:
+            bash_script_path = task._get_script_path(
+                extension="sh", 
+                job_name=job_name,
+                temp_dir=temp_dir
+            )
+
+            with open(bash_script_path, 'w') as handle:
+                handle.write(bash_script)
+
+            # Ensure that the script is readonly for the person exporting. This 
+            # is due to a security vulnerability due to some Task types containing 
+            # sensitive data. Such as the SG tasks which may contain api keys or
+            # auth tokens.
+            # We also want to prevent write access to prevent someone modifying 
+            # the script between creation and execution.
+            # TODO: ensure this also works on Windows.
+            os.chmod(bash_script_path, 0o500) # Sets "r-x------" permissions
+
+            bash_script_exports.append((task, bash_script_path))
+
+        return bash_script_exports
+
+    def export_to_python_script(self, job_name, temp_dir=None, deadline=False):
         """ Will Export this task into a stand alone python script in order to run this task later. 
             
             Note: This a fairly generic implementation that takes advantage of 
@@ -396,22 +521,11 @@ on the farm."""
         if self.python_script_executable is None:
             raise TaskException("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE variable undefined and no executable specified.")
 
-        def sub_space_for_underscore(string):
-            return string.strip().replace(" ", "_")
-
-        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        script_name = "{time}_{job_name}_{task_name}.py".format(
-            time=now,
-            job_name=sub_space_for_underscore(job_name),
-            task_name=sub_space_for_underscore(self.name)
+        file_path = self._get_script_path(
+            extension="py",
+            job_name=job_name,
+            temp_dir=temp_dir
         )
-
-        if self.temp_dir is None:
-            self.temp_dir = temp_dir
-
-        temp_dir = temp_dir or self.temp_dir
-
-        file_path = os.path.join(temp_dir, script_name)
 
         obj_str = repr(self)
         contents = """
@@ -427,6 +541,16 @@ sys.exit(ret)""".format(
 
         with open(file_path, 'w') as handle:
             handle.write(contents)
+
+        # Ensure that the script is readonly for the person exporting. This 
+        # is due to a security vulnerability due to some Task types containing 
+        # sensitive data. Such as the SG tasks which may contain api keys or
+        # auth tokens.
+        # We also want to prevent write access to prevent someone modifying 
+        # the script between creation and execution.
+        # TODO: ensure this also works on Windows.
+        os.chmod(file_path, 0o500) # Sets "r-x------" permissions
+
         return [(self, file_path)]
 
     def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
@@ -461,16 +585,18 @@ sys.exit(ret)""".format(
         # changes any attributes in the parent task.
         sub_tasks = self.export_subtasks(
             export_type, 
-            temp_dir=temp_dir, 
+            temp_dir=self.temp_dir, 
             job_name=job_name, 
             deadline=deadline
         )
 
         # Export the parent task.
         if export_type == "CommandLine":
-            exported_tasks.extend(self.export_to_command_line(temp_dir=temp_dir, deadline=deadline))
+            exported_tasks.extend(self.export_to_command_line(temp_dir=self.temp_dir, deadline=deadline))
+        if export_type == "BashScript":
+            exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
-            exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=temp_dir))
+            exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
 
         # Add the sub tasks to the exported tasks list.
         exported_tasks.extend(sub_tasks)

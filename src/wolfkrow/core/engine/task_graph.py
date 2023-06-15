@@ -190,6 +190,13 @@ class TaskGraph(object):
                         "script": None,
                         "obj": exported_task[0],
                     }
+                elif export_type == "BashScript":
+                    exported_tasks[exported_task[0].name] = {
+                        "executable": "bash",
+                        "executable_args": None,
+                        "script": exported_task[1],
+                        "obj": exported_task[0],
+                    }
                 elif export_type == "PythonScript":
                     exported_tasks[exported_task[0].name] = {
                     "executable": task.python_script_executable,
@@ -197,6 +204,8 @@ class TaskGraph(object):
                     "script": exported_task[1],
                     "obj": exported_task[0],
                 }
+                else:
+                    raise TaskGraphException("Unknown Export Type! Received: {}".format(export_type))
 
         return exported_tasks
 
@@ -272,10 +281,10 @@ class TaskGraph(object):
         """
 
         job_attrs = {
-            "Group": self._settings["deadline"]["default_group"],
-            "Limits": self._settings["deadline"]["default_limits"],
-            "LimitGroups": self._settings["deadline"]["default_limit_groups"],
-            "Pool": self._settings["deadline"]["default_pool"],
+            "Group": self._settings["deadline"].get("default_group"),
+            "Limits": self._settings["deadline"].get("default_limits"),
+            "LimitGroups": self._settings["deadline"].get("default_limit_groups"),
+            "Pool": self._settings["deadline"].get("default_pool"),
         }
 
         # Iterate over and add the attributes from the extra job attributes setting.
@@ -352,9 +361,9 @@ class TaskGraph(object):
             job_attrs.update(additional_job_attrs)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
-            if (hasattr(task["obj"], "start_frame") and 
-                hasattr(task["obj"], "end_frame") and 
-                hasattr(task["obj"], "chunk_size")
+            if (hasattr(task["obj"], "start_frame") and task["obj"].start_frame is not None and
+                hasattr(task["obj"], "end_frame") and task["obj"].end_frame is not None and
+                hasattr(task["obj"], "chunk_size") and task["obj"].chunk_size is not None
             ):
                 job_attrs['Frames'] = "{}-{}".format(task["obj"].start_frame, task["obj"].end_frame)
                 job_attrs['ChunkSize'] = task["obj"].chunk_size  
@@ -389,9 +398,10 @@ class TaskGraph(object):
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
             if isinstance(job, str):
                 print("Failed to submit job. {}".format(job))
+                return None
             else:
                 print("Job: {} - {}".format(job.get("Name"), job["_id"]))
-            return job
+                return job
 
 
         exported_tasks = self.export_tasks(
@@ -421,8 +431,10 @@ class TaskGraph(object):
                 job_dependencies, 
                 batch_name=batch_name
             )
-            deadline_jobs[task_name] = deadline_job
-            task['deadline_id'] = deadline_job["_id"]
+            if deadline_job:
+                deadline_jobs[task_name] = deadline_job
+                task['deadline_id'] = deadline_job["_id"]
+
         return deadline_jobs
 
     def execute_legacy(self):
