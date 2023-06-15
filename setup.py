@@ -4,7 +4,7 @@ packages = find_packages(where="src", include=["wolfkrow", "wolfkrow.*"])
 
 setup(
     name='wolfkrow',
-    version='1.1.1',
+    version='1.4.0',
     description='Wolfkrow is a Task execution engine, which allows users to easily string a series of tasks together in order to create a workflow.',
     url='https://github.com/JakeClark1129/Wolfkrow',
     author='Jacob Clark',
@@ -14,7 +14,7 @@ setup(
     package_data={'': ['core/settings.yaml', 'builder/config_file.yaml']},
     entry_points={
         'console_scripts': [
-            'wolfkrow_run_task=wolfkrow.core.engine.wolfkrow_run_task:main',
+            'wolfkrow_run_task=wolfkrow.scripts.wolfkrow_run_task:main',
         ],
     },
     package_dir={

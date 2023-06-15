@@ -1,0 +1,23 @@
+replacements:
+  new_name: moved
+  other: thinger
+  foo: bar
+
+tasks:
+  convert_to_tiff: 
+    task_type: NukeRender
+    dependencies:
+    source: "{test_data_root}/test_sequence/seq.%04d.exr"
+    destination: "{test_temp_root}/test_sequence_output/seq.%04d.tiff"
+    scripts: 
+      - "{test_data_root}/sample_1.nk"
+      - "{test_data_root}/sample_2.nk"
+      - "{test_data_root}/sample_3.nk"
+    start_frame: 1
+    end_frame: 24
+    file_type: tiff
+    bit_depth: 8 bit
+
+workflows:
+  Convert to Tiff: 
+   - convert_to_tiff
