@@ -42,6 +42,10 @@ class WolfkrowTestCase(unittest.TestCase):
         root = self._get_test_root("temp")
         temp_file = os.path.join(root, temp_file_name)
         return temp_file
+    
+    def get_test_temp_dir(self):
+        root = self._get_test_root("temp")
+        return root
 
     def get_test_data_file(self, test_data_file):
         root = self._get_test_root("data")

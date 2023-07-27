@@ -191,10 +191,17 @@ class TaskGraph(object):
                         "obj": exported_task[0],
                     }
                 elif export_type == "BashScript":
+                    command_bits = exported_task[1].split()
+                    executable = command_bits[0]
+                    args = command_bits[1:]
+                    if deadline:
+                        # Deadline needs special tokens for quotes in order to work correctly.
+                        executable = "<QUOTE>{}<QUOTE>".format(executable)
+
                     exported_tasks[exported_task[0].name] = {
                         "executable": "bash",
                         "executable_args": None,
-                        "script": exported_task[1],
+                        "script": executable,
                         "obj": exported_task[0],
                     }
                 elif export_type == "PythonScript":

@@ -597,6 +597,10 @@ sys.exit(ret)""".format(
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
+        else:
+            raise TaskException("Unknown export type: {}. Expected one of 'CommandLine', 'BashScript', or 'PythonScript'".format(
+                export_type
+            ))
 
         # Add the sub tasks to the exported tasks list.
         exported_tasks.extend(sub_tasks)
