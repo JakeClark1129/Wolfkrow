@@ -14,9 +14,9 @@ from wolfkrow.core.tasks.nuke_render import NukeRender
 
 import unittest
 
+from .wolfkrow_testcase import WolfkrowTestCase
 
-
-class TestTaskExport(unittest.TestCase):
+class TestTaskExport(WolfkrowTestCase):
 
     def setUp(self):
         if not os.path.exists("./test_temp"):
@@ -41,19 +41,6 @@ class TestTaskExport(unittest.TestCase):
 
         Tests BashScript export type.
         """
-
-
-        # ======================================================
-        # ==================== ENABLE PTVSD ====================
-        # ======================================================
-        import ptvsd
-        ptvsd.enable_attach()
-        print("Waiting for attach...")
-        ptvsd.wait_for_attach()
-        # ptvsd.break_into_debugger()
-        # ======================================================
-        # ======================================================
-        # ======================================================
         job = task_graph.TaskGraph("test_BashScript_export")
         t1 = TestSequence(name="Task1", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test")
 
@@ -71,6 +58,32 @@ class TestTaskExport(unittest.TestCase):
             print("Nay")
 
         job.execute_local(export_type="BashScript")
+
+    def test_BashScript_export_deadline(self):
+        """ Tests the standard Task export and execute local method. This test is 
+        meant to be a basic integration test to ensure that you are able to initialize
+        a Task Object, add it to a task graph, and the execute the task graph.
+
+        Tests BashScript export type.
+        """
+
+        temp_dir = self.get_test_temp_dir()
+
+        job = task_graph.TaskGraph("test_BashScript_export")
+        t1 = TestSequence(name="Task1", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test", temp_dir=temp_dir)
+
+        job.add_task(t1)
+
+        exports = job.export_tasks(export_type="BashScript", deadline=True)
+
+        script = exports["Task1"]["script"]
+        script_name = os.path.basename(script)
+        script_name = script_name[:-7] # Strip the last 7 characters. <QUOTE>
+
+        test_script_path = os.path.join(temp_dir, script_name)
+        test_script_path = "<QUOTE>{}<QUOTE>".format(test_script_path)
+
+        self.assertTrue(test_script_path == script, "Deadline export script did not end as expected.")
 
     def test_BashScript_export_subtasks(self):
         """ Tests the export method for a Task which contains subtasks.
