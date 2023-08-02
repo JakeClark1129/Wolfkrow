@@ -593,7 +593,7 @@ sys.exit(ret)""".format(
         # Export the parent task.
         if export_type == "CommandLine":
             exported_tasks.extend(self.export_to_command_line(temp_dir=self.temp_dir, deadline=deadline))
-        if export_type == "BashScript":
+        elif export_type == "BashScript":
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
