@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.DEBUG)
 from wolfkrow.core.tasks.test_tasks import *
 from wolfkrow import Loader
 
-from .wolfkrow_testcase import WolfkrowTestCase
+from wolfkrow_testcase import WolfkrowTestCase
 
 class TestGroupTask(WolfkrowTestCase):
 

@@ -14,7 +14,7 @@ from wolfkrow.core.tasks.nuke_render import NukeRender
 
 import unittest
 
-from .wolfkrow_testcase import WolfkrowTestCase
+from wolfkrow_testcase import WolfkrowTestCase
 
 class TestTaskExport(WolfkrowTestCase):
 

@@ -3,7 +3,7 @@ import unittest
 
 from wolfkrow.builder import workflow_builder
 
-from .wolfkrow_testcase import WolfkrowTestCase
+from wolfkrow_testcase import WolfkrowTestCase
 
 class TestReplacements(WolfkrowTestCase):
     def test_replacements(self):

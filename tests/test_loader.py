@@ -3,7 +3,7 @@ import unittest
 
 from wolfkrow.builder import workflow_builder
 
-from .wolfkrow_testcase import WolfkrowTestCase
+from wolfkrow_testcase import WolfkrowTestCase
 
 class TestLoader(WolfkrowTestCase):
     def test_loader(self):
