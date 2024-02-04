@@ -97,7 +97,7 @@ class SequenceTask(Task):
 
         bash_scripts = super(SequenceTask, self)._generate_bash_script_contents(temp_dir=temp_dir, deadline=deadline)
 
-        if deadline and self.start_frame and self.end_frame:
+        if deadline and self.start_frame is not None and self.end_frame is not None:
             for index, (task, bash_script) in enumerate(bash_scripts):
                 # Replace deadlines <STARTFRAME> and <ENDFRAME> tokens in the bash 
                 # script with "$1" and "$2" because deadline we are modifying the 

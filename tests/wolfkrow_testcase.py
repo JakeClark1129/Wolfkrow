@@ -13,6 +13,9 @@ class WolfkrowTestCase(unittest.TestCase):
         if not os.path.exists("./test_temp"):
             os.makedirs("./test_temp")
 
+        os.environ["TEST_ROOT"] = self._get_test_root()
+        os.environ["WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE"] = "wolfkrow_run_task"
+
     def tearDown(self):
         def on_rm_error( func, path, exc_info):
             # path contains the path of the file that couldn't be removed
@@ -52,8 +55,11 @@ class WolfkrowTestCase(unittest.TestCase):
         temp_file = os.path.join(root, test_data_file)
         return temp_file
 
-    def _get_test_root(self, root_type):
+    def _get_test_root(self, root_type=None):
         current_file = os.path.realpath(__file__)
         test_root = os.path.dirname(current_file)
-        test_root = os.path.join(test_root, "test_{}".format(root_type))
+
+        if root_type is not None:
+            test_root = os.path.join(test_root, "test_{}".format(root_type))
+
         return test_root

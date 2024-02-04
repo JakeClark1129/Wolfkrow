@@ -8,10 +8,46 @@ task_attribute_defaults:
     python_script_executable: "nuke"
     python_script_executable_args: ["-t"]
 
+
+resolver_search_paths:
+   - $TEST_ROOT/test_data/resolver_test_dir/
+   - $TEST_ROOT/test_data/resolver_test_dir/nested/
+
 replacements:
   new_name: moved
+  w: 1920
+  h: 1080
+  x: 0
+  y: 0
 
 tasks:
+
+  1920x1080_image:
+    task_type: FFMPEG
+    input: {original_image}
+    output: "{dest_root}/1920x1080/{original_image_name}"
+    additional_args: "crop 0,0,1920,1080"
+    #ffmpeg_args: "crop 0,0,1920,1080"
+  1280x720_image:
+    task_type: FFMPEG
+    input: {original_image}
+    output: {1020x1080_dest}
+    ffmpeg_args: "crop 0,0,1920,1080"
+  480x240_image:
+    task_type: FFMPEG
+    input: {original_image}
+    output: {1020x1080_dest}
+    ffmpeg_args: "crop 0,0,1920,1080"
+  custom_image_Rez:
+    task_type: FFMPEG
+    input: {original_image}
+    output: {custom_rez_dest}
+    ffmpeg_args: "crop {w},{h},{x},{y}"
+  create_mock_template:
+    task_type: PhotoShop
+    input: {original_image}
+    photoshop_file: "{mock_template}"
+    destination: "{dest_root}/mock_templates/{original_image_name}"
   copy_source:
     task_type: FileCopy
     dependencies:
@@ -34,7 +70,7 @@ tasks:
     task_type: FileCopy
     dependencies:
     source: "{foo}"
-    destination: "{new_name}"
+    destination: "@resolver/test_resolver.txt"
 
   test_success1:
     task_type: TestTask_Successful

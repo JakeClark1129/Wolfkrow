@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 
 from wolfkrow.core import utils
+from wolfkrow.core.engine.resolver import Resolver
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -286,6 +287,10 @@ class TaskGraph(object):
                 Dict: Dictionary containing Group, Limits, and Pool. Intended for 
                     use when submitting a Task to Deadline.
         """
+        # Get the search paths settings for the resolver prefix logic.
+        resolver_search_paths = self._settings.get("resolver", {}).get("search_paths", [])
+
+        resolver = Resolver(replacements, resolver_search_paths, sgtk=sgtk)
 
         job_attrs = {
             "Group": self._settings["deadline"].get("default_group"),
@@ -298,11 +303,7 @@ class TaskGraph(object):
         job_attributes_setting = self._settings["deadline"].get("extra_job_attributes", {})
         for attr_key, attr_value in list(job_attributes_setting.items()):
             # replace replacements in the attr value:
-            attr_value_replaced = utils.replace_replacements(
-                attr_value, 
-                replacements, 
-                sgtk=sgtk
-            )
+            attr_value_replaced = resolver.resolve(attr_value)
             job_attrs[attr_key] = attr_value_replaced
 
         # Now look up any task_type specific overrides

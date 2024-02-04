@@ -10,7 +10,7 @@ import unittest
 
 from wolfkrow.core.tasks import file_copy
 
-from wolfkrow_testcase import WolfkrowTestCase
+from .wolfkrow_testcase import WolfkrowTestCase
 
 class TestFileCopy(WolfkrowTestCase):
 

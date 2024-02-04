@@ -113,6 +113,11 @@ class TaskGroup(Task):
                 self._write_python_group_file(fh, exported_tasks)
             elif export_type == "CommandLine":
                 self._write_command_line_group_file(fh, exported_tasks)
+            elif export_type == "BashScript":
+                # TODO: Implement this
+                raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
+            else:
+                raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
 
     def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
         """ Overrides the default export method to allow it to combine all of the
@@ -183,5 +188,11 @@ class TaskGroup(Task):
             export_command = "bash " + group_file_path
         elif export_type == "PythonScript":
             export_command = group_file_path
+        elif export_type == "BashScript":
+            # TODO: Implement this
+            raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
+        else:
+            raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
+
 
         return [(self, export_command)]

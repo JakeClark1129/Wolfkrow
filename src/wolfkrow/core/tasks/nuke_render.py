@@ -12,6 +12,7 @@ from .task import Task, TaskAttribute
 from .sequence_task import SequenceTask
 from .task_exceptions import TaskValidationException
 
+from wolfkrow.core.engine.resolver import Resolver
 
 class NukeTask(Task):
     def export_to_command_line(self, temp_dir=None, deadline=False):
@@ -491,6 +492,8 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             task_name=self.name,
         )
 
+        resolver = Resolver(self.replacements, self.resolver_search_paths)
+
         # Now that everything is concatenated, substitute all the replacements:
         import wolfkrow.core.utils as utils        
         all_nodes = nuke.allNodes()
@@ -499,7 +502,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 knob = node[knob_name]
                 knob_value = knob.value()
                 if isinstance(knob_value, basestring):
-                    new_knob_value = utils.replace_replacements(knob_value, self.replacements)
+                    new_knob_value = resolver.resolve(knob_value)
                     if knob_value != new_knob_value:
                         try:
                             knob.setValue(new_knob_value)
@@ -516,7 +519,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                         expression = animation.expression()
                         expression = re.sub("\\\\{", "{", expression)
                         expression = re.sub("\\\\}", "}", expression)
-                        new_expression = utils.replace_replacements(expression, self.replacements)
+                        new_expression = resolver.resolve(expression)
                         if expression != new_expression:
                             try:
                                 knob.setExpression(new_expression, index)
@@ -528,7 +531,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         script_dir = os.path.dirname(script_path)
         if not os.path.exists(script_dir):
             try:
-                os.path.makedirs(script_dir)
+                os.makedirs(script_dir)
             except OSError as error:
                 if error.errno != errno.EEXIST:
                     raise

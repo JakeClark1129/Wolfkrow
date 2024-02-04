@@ -11,9 +11,11 @@ from wolfkrow.core.tasks import task_exceptions
 from wolfkrow.core.tasks.test_tasks import *
 from wolfkrow.core import utils
 
+from .wolfkrow_testcase import WolfkrowTestCase
+
 # TODO: These tests rely on deadline API. We should try and get API stubs in place
 # so we don't need to actually submit jobs to the farm.
-class TestExecuteDeadline(unittest.TestCase):
+class TestExecuteDeadline(WolfkrowTestCase):
     def test_taskGraphExecuteSuccess(self):
         job = task_graph.TaskGraph("taskGraphExecuteSuccess")
         t1 = TestTask_Successful(name="Task1", dependencies=[], replacements={})

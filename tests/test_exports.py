@@ -14,7 +14,7 @@ from wolfkrow.core.tasks.nuke_render import NukeRender
 
 import unittest
 
-from wolfkrow_testcase import WolfkrowTestCase
+from .wolfkrow_testcase import WolfkrowTestCase
 
 class TestTaskExport(WolfkrowTestCase):
 
@@ -45,17 +45,6 @@ class TestTaskExport(WolfkrowTestCase):
         t1 = TestSequence(name="Task1", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test")
 
         job.add_task(t1)
-
-        word = "abcddeba"
-        word_len = len(word) - 1
-        for i in range(word_len):
-            if word[i] == word[word_len - i]:
-                a = i
-
-        if a == i:
-            print("Yay!")
-        else:
-            print("Nay")
 
         job.execute_local(export_type="BashScript")
 
