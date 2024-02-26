@@ -48,6 +48,31 @@ class TestTaskExport(WolfkrowTestCase):
 
         job.execute_local(export_type="BashScript")
 
+    def test_BashScript_export_already_exists(self):
+        """ Test that the bash script creation logic correctly handles cases where 
+        a script already exists by ensuring that the script path generated is unique.
+        """
+        temp_dir = self.get_test_temp_dir()
+        
+        t1 = TestSequence(name="TestExportExists", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test")
+        
+        exported_a = t1.export(temp_dir=temp_dir, export_type="BashScript")
+        exported_b = t1.export(temp_dir=temp_dir, export_type="BashScript")
+
+        # Add the 4 exported paths to a set so that duplicates are not added.
+        # NOTE: These paths include a time-stamp down to the second. It's possible
+        #   that the generation logic for the path's run at a different second, 
+        #   giving us a false negative. Though this is incredibly rare given how
+        #   quickly this code runs.
+        script_paths = set([])
+        script_paths.add(exported_a[0][1])
+        script_paths.add(exported_a[1][1])
+        script_paths.add(exported_b[0][1])
+        script_paths.add(exported_b[1][1])
+
+        # Now ensure that 4 different scripts were added to the set.
+        self.assertTrue(len(script_paths) == 4)
+
     def test_BashScript_export_deadline(self):
         """ Tests the standard Task export and execute local method. This test is 
         meant to be a basic integration test to ensure that you are able to initialize

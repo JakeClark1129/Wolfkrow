@@ -223,3 +223,6 @@ class Loader(object):
             task_graph.add_task(task)
 
         return task_graph
+
+    def get_workflow_names(self):
+        return self.config["workflows"].keys()
