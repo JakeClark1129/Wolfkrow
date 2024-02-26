@@ -565,6 +565,22 @@ class Task(with_metaclass(TaskType, object)):
 
         file_path = os.path.join(temp_dir, script_name)
 
+        # We need to make sure that this script path does not already exist.
+        # If it does, then we need to rename our script path. Lets add a _(#) 
+        # to the end of the file name to prevent this.
+        if os.path.exists(file_path):
+            no_ext_path, ext = os.path.splitext(file_path)
+            
+            updated_script_path_template = no_ext_path + "_({number})" + ext
+            
+            counter = 1
+            updated_script_path = updated_script_path_template.format(number=counter)
+            while os.path.exists(updated_script_path):
+                counter += 1
+                updated_script_path = updated_script_path_template.format(number=counter)
+
+            file_path = updated_script_path
+
         return file_path
 
     def _command_line_sanitize_attribute(
