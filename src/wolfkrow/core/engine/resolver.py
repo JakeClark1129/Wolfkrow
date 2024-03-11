@@ -21,6 +21,7 @@ class Resolver(object):
 
     RESOLVER_TOKEN = "@resolver"
     SGTK_TEMPLATE_REGEX = "(SGTKTEMPLATE<)(.*)(>)"
+    BASIC_REPLACEMENT_REGEX = "{(\w+)}"
 
     def __init__(self, replacements, search_paths, sgtk=None, resolver_token=RESOLVER_TOKEN):
         """_summary_
@@ -145,6 +146,73 @@ class Resolver(object):
             print("    {}".format(searched_path))
 
         return path
+
+    @classmethod
+    def check_for_replacements(self, value):
+        """ Checks to see if there are any replacements in the value.
+
+        NOTE: If value is a nuke script (or other supported file format), then
+            this function will also open the script and attempt to find 
+            replacements there
+        """
+
+        def search_str(str_):
+            """ Replaces the replacements in the string.
+
+            Args:
+                str_ (str): The value to replace the replacements for.
+
+            Returns:
+                str: The string with it's values replaced.
+            """
+            found_replacements = re.findall(self.BASIC_REPLACEMENT_REGEX, str_)
+            return found_replacements
+            
+        def search_list(list_):
+            found_replacements = []
+            for index in range(len(list_)):
+                if isinstance(list_[index], dict):
+                    found = search_dict(list_[index])
+                    found_replacements.extend(found)
+                elif isinstance(list_[index], list):
+                    found = search_list(list_[index])
+                    found_replacements.extend(found)
+                elif isinstance(value, basestring):
+                    found = search_str(list_[index])
+                    found_replacements.extend(found)
+
+            return found_replacements
+
+        def search_dict(dict_):
+            found_replacements = []
+            for key, value in list(dict_.items()):
+                if isinstance(value, dict):
+                    found = search_dict(value)
+                    found_replacements.extend(found)
+                elif isinstance(value, list):
+                    found = search_list(value)
+                    found_replacements.extend(found)
+                elif isinstance(value, basestring):
+                    found = search_str(value)
+                    found_replacements.extend(found)
+
+            return found_replacements
+
+        # NOTE: We are assuming that we will only ever get a dict, list or a string. 
+        #   But this is not necessarily true. We should instead check for dict-like objects,
+        #   or list-like objects. 
+
+        if isinstance(value, dict):
+            found_replacements = search_dict(value)
+        elif isinstance(value, list):
+            found_replacements = search_list(value)
+        elif isinstance(value, basestring):
+            found_replacements = search_str(value)
+
+        #TODO: Add a check_for_replacements function to task definitions so that some 
+        #   tasks can add custom logic to how replacements are searched for. Such as 
+        #   Nuke task searching nuke scripts for replacements.
+        return found_replacements
 
     def _replace_replacements(self, value):
 

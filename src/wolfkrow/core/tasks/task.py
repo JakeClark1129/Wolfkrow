@@ -570,6 +570,8 @@ sys.exit(ret)""".format(
         # We also want to prevent write access to prevent someone modifying 
         # the script between creation and execution.
         # TODO: ensure this also works on Windows.
+        # NOTE: This probably doesn't solve the security vulnerability... We 
+        #   probably want to add support for some kind of credential manager
         os.chmod(file_path, 0o500) # Sets "r-x------" permissions
 
         return [(self, file_path)]

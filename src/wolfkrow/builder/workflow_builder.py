@@ -180,6 +180,19 @@ class Loader(object):
             return self.config['task_attribute_defaults'][task_name]
         return {}
 
+    def get_task_data(self, task_name):
+        # Get default task data dictionary
+        configured_task_data = self.config['tasks'].get(task_name)
+        if not configured_task_data:
+            print("Warning: Task '{task_name}' is undefined. Ignoring...".format(task_name=task_name))
+            return None
+
+        default_task_data = self.get_default_task_data(configured_task_data['task_type'])
+        task_data = copy.deepcopy(default_task_data)
+        task_data.update(configured_task_data)
+
+        return task_data
+
     def parse_workflow(self, workflow_name):
 
         task_graph = TaskGraph(
@@ -195,16 +208,9 @@ class Loader(object):
         for task_name in workflow_tasks:
 
             # Get default task data dictionary
-            configured_task_data = self.config['tasks'].get(task_name)
-            if not configured_task_data:
-                print("Warning: Task '{task_name}' is undefined. Ignoring...".format(task_name=task_name))
-                continue
+            task_data = self.get_task_data(task_name)
 
-            default_task_data = self.get_default_task_data(configured_task_data['task_type'])
-            task_data = copy.deepcopy(default_task_data)
-            task_data.update(configured_task_data)
-
-            task_type = configured_task_data['task_type']
+            task_type = task_data['task_type']
             task_obj = tasks.all_tasks.get(task_type)
             if task_obj is None:
                 print("Warning: Task type '{task_type}' is undefined. Ignoring...".format(task_type=task_type))
@@ -226,3 +232,51 @@ class Loader(object):
 
     def get_workflow_names(self):
         return self.config["workflows"].keys()
+
+
+    def get_required_task_replacements(self, task_name):
+        tasks_lookup = self.config["tasks"]
+
+        task_data = self.get_task_data(task_name)
+        if task_data is None:
+            return None
+
+        required_task_replacements = []
+
+        for attribute, value in task_data.items():
+            found_replacements = resolver.Resolver.check_for_replacements(value)
+            if found_replacements:
+                required_task_replacements.extend(found_replacements)
+
+        return required_task_replacements
+
+
+    def get_required_workflow_replacements(self, workflow_name):
+        workflow = self.config["workflows"].get(workflow_name)
+
+        if workflow is None:
+            return None
+        
+        required_workflow_replacements = []
+
+        for task_name in workflow:
+            task_required_replacements = self.get_required_task_replacements(task_name)
+            if task_required_replacements:
+                required_workflow_replacements.extend(task_required_replacements)
+
+        # Convert all the replacements to data objects
+        # NOTE: This is a stop gap hack. We need to add configuration to the workflow definitions which allow techinical users to define required replacements.
+        required_workflow_replacement_data_objects = []
+        for replacement in required_workflow_replacements:
+            replacement_data_object = RequiredReplacementData(replacement, options=None, strict=False)
+            required_workflow_replacement_data_objects.append(replacement_data_object)
+
+        return required_workflow_replacement_data_objects
+
+
+class RequiredReplacementData():
+    def __init__(self,replacement_name, default=None, options=None, strict=False):
+        self.replacement_name = replacement_name
+        self.default = default
+        self.options = options
+        self.strict = strict
