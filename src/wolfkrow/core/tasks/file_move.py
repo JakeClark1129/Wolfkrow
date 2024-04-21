@@ -20,3 +20,10 @@ class FileMove(FileOperation):
 
     def operate(self, source, destination):
         shutil.move(source, destination)
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": True,
+            "icon": None # TODO: Add a default icon
+        }

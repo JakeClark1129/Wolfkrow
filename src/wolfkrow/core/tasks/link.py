@@ -65,3 +65,10 @@ class Link(FileOperation):
 
         if self.destination_permission:
             self.set_permission(destination, self.destination_permission)
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": True,
+            "icon": None # TODO: Add a default icon
+        }

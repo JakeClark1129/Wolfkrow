@@ -38,8 +38,11 @@ class CommandLine(SequenceTask):
         the start and end frame attributes for their corresponding tokens.
     """
 
-    script = TaskAttribute(required=True, description="The Command to run on the command line.")
-    args = TaskAttribute(required=True, attribute_type=list, description="The arguments to the command. Must be supplied as a list.")
+    script = TaskAttribute(required=True, configurable=True, 
+        description="The Command to run on the command line.")
+
+    args = TaskAttribute(required=True, attribute_type=list, configurable=True,
+        description="The arguments to the command. Must be supplied as a list.")
 
     def export_to_command_line(self, temp_dir=None, deadline=False):
         """ Overwrites the default behavior of this this method to just recreate 
@@ -69,3 +72,10 @@ class CommandLine(SequenceTask):
 
     # TODO: We need to implement the run method, otherwise the PythonScript export 
     # type won't work for this task type. It should be a subprocess call.
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": True,
+            "icon": None # TODO: Add a default icon
+        }

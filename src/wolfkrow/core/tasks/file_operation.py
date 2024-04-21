@@ -19,24 +19,27 @@ class FileOperation(Task):
             a trailing slash OR ensure the directory exists ahead of time.
     """
 
-    source = TaskAttribute(default_value="", attribute_type=str)
-    destination = TaskAttribute(default_value="", attribute_type=str)
+    source = TaskAttribute(default_value="", attribute_type=str, configurable=True)
+    destination = TaskAttribute(default_value="", attribute_type=str, configurable=True)
 
     # Optional attributes used when when the source files are a sequence.
     start_frame = TaskAttribute(
         default_value=None,
         attribute_type=int, 
-        description="Start frame of the source frames to operate on."
+        description="Start frame of the source frames to operate on.",
+        configurable=True,
     )
     end_frame = TaskAttribute(
         default_value=None,
         attribute_type=int, 
-        description="End frame of the source frames to operate on."
+        description="End frame of the source frames to operate on.",
+        configurable=True,
     )
     renumbered_start_frame = TaskAttribute(
         default_value=None,
         attribute_type=int, 
-        description="Start frame to renumber the destination sequence to."
+        description="Start frame to renumber the destination sequence to.",
+        configurable=True,
     )
 
     def __init__(self, **kwargs):

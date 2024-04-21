@@ -67,3 +67,10 @@ class ShotgunUploadThumbnail(ShotgunTask):
 
         self._sg.upload_thumbnail(self.entity_type, self.shotgun_id, self.source)
         return 0
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": True,
+            "icon": None # TODO: Add a default icon
+        }

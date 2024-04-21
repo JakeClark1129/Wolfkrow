@@ -234,10 +234,10 @@ class Task(with_metaclass(TaskType, object)):
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
 
-    python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+    python_script_executable = TaskAttribute(default_value=None, attribute_type=str, serialize=False)
+    python_script_executable_args = TaskAttribute(default_value=None, attribute_type=list, serialize=False)
+    command_line_executable = TaskAttribute(default_value=None, attribute_type=str, serialize=False)
+    command_line_executable_args = TaskAttribute(default_value=None, attribute_type=list, serialize=False)
     sgtk = TaskAttribute(default_value=None, configurable=False, serialize=False)
 
     def __init__(self, **kwargs):
@@ -677,6 +677,19 @@ sys.exit(ret)""".format(
 
         rep = self.__class__.__name__ + "(" + argStr + ")"
         return str(rep)
+
+    @classmethod
+    def icon(cls):
+        # TODO: Return name of the default icon.
+        # TODO: Create icon's for all Task's, and implement each Task's icon method.
+        return None
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": False,
+            "icon": None # TODO: Add a default icon
+        }
 
     @classmethod
     def from_dict(
