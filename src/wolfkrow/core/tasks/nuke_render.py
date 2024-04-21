@@ -726,6 +726,14 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
         return 0
 
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": True,
+            "icon": None # TODO: Add a default icon
+        }
+
+
 # INFO: ===========================================================================
 # Nuke Render Run is the part of the nuke render which actually does the rendering.
 # The first task handles the concatenation and generation of the nuke script.
@@ -809,6 +817,9 @@ class NukeRenderRun(NukeTask, SequenceTask):
         nuke.execute(self.write_node, self.start_frame, self.end_frame, self.increment)
         return 0
 
-    def outputs(self):
-        pass
-
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": False,
+            "icon": None # TODO: Add a default icon
+        }

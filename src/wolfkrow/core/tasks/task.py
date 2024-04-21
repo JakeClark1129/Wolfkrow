@@ -789,6 +789,19 @@ class Task(with_metaclass(TaskType, object)):
         return str(rep)
 
     @classmethod
+    def icon(cls):
+        # TODO: Return name of the default icon.
+        # TODO: Create icon's for all Task's, and implement each Task's icon method.
+        return None
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": False,
+            "icon": None # TODO: Add a default icon
+        }
+
+    @classmethod
     def from_dict(
         cls, 
         data_dict, 

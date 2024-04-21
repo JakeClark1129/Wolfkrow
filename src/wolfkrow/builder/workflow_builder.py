@@ -38,7 +38,6 @@ class Loader(object):
 
         self._config_file_paths = config_file_paths
         self.__config = None
-        self.replacements = replacements or {}
         self._sgtk = sgtk
         self.temp_dir = temp_dir
 
@@ -48,6 +47,13 @@ class Loader(object):
             self.__config = self._load_configs(self._config_file_paths)
         
         return self.__config
+
+    @property
+    def replacements(self):
+        if "replacements" in self.config:
+            return self.config["replacements"]
+
+        return None
 
     def _update_config(self, current_dict, new_dict):
         
@@ -81,6 +87,11 @@ class Loader(object):
         replacements_dict = new_dict.get("replacements")
         if replacements_dict:
             if "replacements" not in current_dict:
+                # Ensure that the replacements dictionary is an instance of ReplacementsDict.
+                # This is because ReplacementsDict has special logic to handle missing values
+                if not isinstance(replacements_dict, resolver.ReplacementsDict):
+                    replacements_dict = resolver.ReplacementsDict(replacements_dict)
+
                 current_dict["replacements"] = replacements_dict
             else:
                 current_dict["replacements"].update(replacements_dict)
@@ -129,11 +140,6 @@ class Loader(object):
 
             config_snippet = yaml.load(file_contents, Loader=yaml.Loader)
             self._update_config(config, config_snippet)
-
-        # replace replacements
-        # TODO: Should configured replacements overwrite replacements that are passed 
-        # into the tool, or viceversa?
-        self.replacements.update(config.get('replacements', {}))
 
         return config
 

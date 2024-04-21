@@ -232,3 +232,10 @@ file name as the input images will be used, with the output format dependent fil
         if not success:
             print("Failed for frames: {}".format(failed_frame_str))
         return 0 if success else 1
+
+    @classmethod
+    def ui_settings(cls):
+        return {
+            "appear_in_task_list": True,
+            "icon": None # TODO: Add a default icon
+        }
