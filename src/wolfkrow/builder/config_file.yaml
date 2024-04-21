@@ -8,6 +8,11 @@ task_attribute_defaults:
 replacements:
    shotgun_site: "$SHOTGUN_SITE_URL"
 
+resolver_search_paths:
+   - /shows/$SHOW/$SEQUENCE/$SHOT/config
+   - /shows/$SHOW/$SEQUENCE/config
+   - /shows/$SHOW/config
+
 tasks:
    Group_Test:
       task_type: Group

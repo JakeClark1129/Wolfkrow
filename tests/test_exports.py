@@ -46,17 +46,6 @@ class TestTaskExport(WolfkrowTestCase):
 
         job.add_task(t1)
 
-        word = "abcddeba"
-        word_len = len(word) - 1
-        for i in range(word_len):
-            if word[i] == word[word_len - i]:
-                a = i
-
-        if a == i:
-            print("Yay!")
-        else:
-            print("Nay")
-
         job.execute_local(export_type="BashScript")
 
     def test_BashScript_export_deadline(self):

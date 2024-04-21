@@ -6,7 +6,7 @@ import string
 import yaml
 from ..core import tasks
 from ..core.engine.task_graph import TaskGraph
-from ..core import utils
+from ..core.engine import resolver
 
 class LoaderException(Exception):
     """ Exception for generic Task errors
@@ -41,9 +41,10 @@ class Loader(object):
         self._sgtk = sgtk
         self.temp_dir = temp_dir
 
-        # Ensure that the replacements dictionary is an instance of ReplacementsDict
-        if not isinstance(self.replacements, utils.ReplacementsDict):
-            self.replacements = utils.ReplacementsDict(self.replacements)
+        # Ensure that the replacements dictionary is an instance of ReplacementsDict.
+        # This is because ReplacementsDict has special logic to handle missing values
+        if not isinstance(self.replacements, resolver.ReplacementsDict):
+            self.replacements = resolver.ReplacementsDict(self.replacements)
 
     @property
     def config(self):
@@ -87,6 +88,11 @@ class Loader(object):
                 current_dict["replacements"] = replacements_dict
             else:
                 current_dict["replacements"].update(replacements_dict)
+
+        resolver_search_paths = new_dict.get("resolver_search_paths")
+        if resolver_search_paths:
+            # resolver search paths completely override any previously specified search paths.
+            current_dict["resolver_search_paths"] = resolver_search_paths
 
         task_attribute_defaults = new_dict.get("task_attribute_defaults")
         if task_attribute_defaults:
@@ -159,7 +165,8 @@ class Loader(object):
             task_data['config'] = self.config
             task = task_obj.from_dict(
                 task_data, 
-                replacements=self.replacements, 
+                replacements=self.replacements,
+                resolver_search_paths=self.config.get("resolver_search_paths", []),
                 config_files=self._config_file_paths, 
                 temp_dir=self.temp_dir,
                 sgtk=self._sgtk
@@ -208,6 +215,7 @@ class Loader(object):
             task = task_obj.from_dict(
                 task_data, 
                 replacements=self.replacements, 
+                resolver_search_paths=self.config.get("resolver_search_paths", []),
                 config_files=self._config_file_paths, 
                 temp_dir=self.temp_dir,
                 sgtk=self._sgtk

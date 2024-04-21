@@ -13,12 +13,9 @@ from wolfkrow.core.tasks import task, sequence_task, task_exceptions
 from wolfkrow.core.engine import task_graph
 from wolfkrow.core.tasks.test_tasks import *
 
+from .wolfkrow_testcase import WolfkrowTestCase
 
-
-
-
-
-class TestSequenceTask(unittest.TestCase):
+class TestSequenceTask(WolfkrowTestCase):
 
     def setUp(self):
         if not os.path.exists("./test_temp"):
@@ -39,17 +36,7 @@ class TestSequenceTask(unittest.TestCase):
     def test_taskSequenceExecuteSuccess_command_line_normal(self):
         """ Tests that the SequenceTask is able to export its tasks to a shell 
         command correctly without deadline enabled.
-        """# ======================================================
-        # ==================== ENABLE PTVSD ====================
-        # ======================================================
-        import ptvsd
-        ptvsd.enable_attach()
-        print("Waiting for attach...")
-        ptvsd.wait_for_attach()
-        # ptvsd.break_into_debugger()
-        # ======================================================
-        # ======================================================
-        # ======================================================
+        """
         # logging.info("===========================================")
         # logging.info("RUNNING TEST 'test_taskSequenceExecuteSuccess_command_line_normal'")
         # logging.info("===========================================")
@@ -71,17 +58,6 @@ class TestSequenceTask(unittest.TestCase):
         """ Tests that the SequenceTask is able to export its tasks to a shell 
         command correctly with deadline enabled.
         """
-        # ======================================================
-        # ==================== ENABLE PTVSD ====================
-        # ======================================================
-        import ptvsd
-        ptvsd.enable_attach()
-        print("Waiting for attach...")
-        ptvsd.wait_for_attach()
-        # ptvsd.break_into_debugger()
-        # ======================================================
-        # ======================================================
-        # ======================================================
         t1 = TestSequence(name="Task1", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test")
 
         error = False

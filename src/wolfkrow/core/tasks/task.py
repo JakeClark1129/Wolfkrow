@@ -14,6 +14,7 @@ import traceback
 
 from weakref import WeakKeyDictionary
 
+from wolfkrow.core.engine.resolver import Resolver
 from wolfkrow.core.tasks.task_exceptions import TaskException
 from wolfkrow.core import utils
 from future.utils import with_metaclass
@@ -223,6 +224,7 @@ class Task(with_metaclass(TaskType, object)):
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
+    resolver_search_paths = TaskAttribute(default_value=[], configurable=False, attribute_type=list)
     config_files = TaskAttribute(
         default_value=[],
         configurable=False,
@@ -656,7 +658,15 @@ sys.exit(ret)""".format(
         return str(rep)
 
     @classmethod
-    def from_dict(cls, data_dict, replacements=None, config_files=None, sgtk=None, temp_dir=None):
+    def from_dict(
+        cls, 
+        data_dict, 
+        replacements=None, 
+        resolver_search_paths=None, 
+        config_files=None, 
+        sgtk=None, 
+        temp_dir=None
+    ):
         """ Generic implementation of the 'from_dict' method for converting a dictionary
             containing the data for a Task object into a Task object. For more control
             over the conversion process, please override this method on your custom 
@@ -681,8 +691,10 @@ sys.exit(ret)""".format(
         if temp_dir and "temp_dir" not in replacements:
             replacements["temp_dir"] = temp_dir
 
+        resolver = Resolver(replacements, resolver_search_paths, sgtk=sgtk)
+
         if replacements:
-            utils.replace_replacements_dict_crawler(data_dict, replacements, sgtk=sgtk)
+            resolver.resolve(data_dict)
         else:
             #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
             pass
@@ -697,6 +709,9 @@ sys.exit(ret)""".format(
 
         if "replacements" not in filtered_data_dict:
             filtered_data_dict["replacements"] = replacements
+
+        if "resolver_search_paths" not in filtered_data_dict:
+            filtered_data_dict["resolver_search_paths"] = resolver_search_paths
 
         if temp_dir and "temp_dir" not in filtered_data_dict:
             filtered_data_dict["temp_dir"] = temp_dir

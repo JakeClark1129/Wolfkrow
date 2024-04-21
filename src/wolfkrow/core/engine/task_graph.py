@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 
 from wolfkrow.core import utils
+from wolfkrow.core.engine.resolver import Resolver
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -198,6 +199,10 @@ class TaskGraph(object):
                         # Deadline needs special tokens for quotes in order to work correctly.
                         executable = "<QUOTE>{}<QUOTE>".format(executable)
 
+                    # If there were args, then add them back to the script executable
+                    if args:
+                        executable = "{} {}".format(executable, " ".join(args))
+
                     exported_tasks[exported_task[0].name] = {
                         "executable": "bash",
                         "executable_args": None,
@@ -286,6 +291,10 @@ class TaskGraph(object):
                 Dict: Dictionary containing Group, Limits, and Pool. Intended for 
                     use when submitting a Task to Deadline.
         """
+        # Get the search paths settings for the resolver prefix logic.
+        resolver_search_paths = self._settings.get("resolver", {}).get("search_paths", [])
+
+        resolver = Resolver(replacements, resolver_search_paths, sgtk=sgtk)
 
         job_attrs = {
             "Group": self._settings["deadline"].get("default_group"),
@@ -298,11 +307,7 @@ class TaskGraph(object):
         job_attributes_setting = self._settings["deadline"].get("extra_job_attributes", {})
         for attr_key, attr_value in list(job_attributes_setting.items()):
             # replace replacements in the attr value:
-            attr_value_replaced = utils.replace_replacements(
-                attr_value, 
-                replacements, 
-                sgtk=sgtk
-            )
+            attr_value_replaced = resolver.resolve(attr_value)
             job_attrs[attr_key] = attr_value_replaced
 
         # Now look up any task_type specific overrides
@@ -325,6 +330,7 @@ class TaskGraph(object):
         batch_name=None, 
         inherit_environment=True, 
         environment=None,
+        additional_job_attributes=None,
         temp_dir=None, 
         export_type="CommandLine"
     ):
@@ -353,6 +359,8 @@ class TaskGraph(object):
         def submit_task_to_deadline(task, deadline, dependencies, batch_name=None, frames=None):
             dependencies_str = ",".join(dependencies)
             batch_name = batch_name or self.name
+
+            # Initialize the base job_attrs for a CommandLine Deadline Job.
             job_attrs = {
                 "Name": task['obj'].name,
                 "BatchName": batch_name,
@@ -360,6 +368,12 @@ class TaskGraph(object):
                 "JobDependencies": dependencies_str,
             }
 
+            # Now add the additional job attributes passed in, which may be required
+            # to run on the local deadline set up.
+            if additional_job_attributes:
+                job_attrs.update(additional_job_attributes)
+
+            # Finally, add the additional job attributes from the configuration file.
             additional_job_attrs = self._get_additional_job_attrs(
                 replacements=task["obj"].replacements,
                 sgtk=task["obj"].sgtk,
