@@ -12,7 +12,7 @@ modules = glob.glob(join(dirname(__file__), "*.py"))
 ignored_modules = ["__init__.py"]
 __all__ = [ basename(f)[:-3] for f in modules if isfile(f) and basename(f) not in ignored_modules]
 
-# Search current direcotry first.
+# Search current directory first.
 from . import *
 
 # Search direcotries found in the WOLFKROW_TASK_SEARCH_PATHS.

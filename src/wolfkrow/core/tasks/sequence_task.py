@@ -206,7 +206,7 @@ class SequenceTask(Task):
         }
         exported = self._export_sequence_task(export_method_name, export_method_args)
 
-        if deadline and self.start_frame and self.end_frame:
+        if deadline and self.start_frame is not None and self.end_frame is not None:
             # Add Start and End frame tokens to the export for sequence tasks.
             for index, export in enumerate(exported):
                 task, script_path = export
@@ -243,7 +243,7 @@ class SequenceTask(Task):
         }
         exported = self._export_sequence_task(export_method_name, export_method_args)
 
-        if deadline and self.start_frame and self.end_frame:
+        if deadline and self.start_frame is not None and self.end_frame is not None:
             # Add Start and End frame tokens to the python script args for sequence tasks.
             for index, export in enumerate(exported):
                 task, script_path = export
