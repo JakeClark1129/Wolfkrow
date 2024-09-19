@@ -35,65 +35,33 @@ class Resolver(object):
         self.resolver_token = resolver_token
 
     def resolve(self, value):
-        """ Iterates through a Dictionary, List or Str looking for {replacement_name} 
-            style tokens or @resolver tokens, and replaces them with the 
-            corresponding value found in the replacements dict or path found on disk.
-            
-            # NOTE: This function recursively iterates through a dictionary or list. 
-            #   Dictionaries or Lists containing themselves will cause an infinite recursion.
+        """
+        Recurses into dicts + lists searching for {replacement_name} or
+        @resolver tokens, replacing them with the corresponding value found in
+        the replacements dict or path found on disk.
+
+        NOTE: This function recursively iterates through a dictionary or list.
+        Dictionaries or lists containing themselves will cause infinite
+        recursion.
 
         Args:
-            value: An object (Str, Dict, or List) to replace the replacements for.
+            value (str, dict or list): An instance to do replacements for.
         """
-
-        def resolve_str(str_):
-            """ Replaces the replacements in the string.
-
-            Args:
-                str_ (str): The value to replace the replacements for.
-
-            Returns:
-                str: The string with it's values replaced.
-            """
-            # NOTE: It's important here that we replace the replacements first, 
-            #   because it's possible that a value starts with a replacements, 
-            #   whose value starts with the resolver token.
-            str_ = self._replace_replacements(str_)
-            str_ = self._resolve_prefix(str_)
-            return str_
-            
-        def resolve_list(list_):
-            for index in range(len(list_)):
-                if isinstance(list_[index], dict):
-                    list_[index] = resolve_dict(list_[index])
-                elif isinstance(list_[index], list):
-                    list_[index] = resolve_list(list_[index])
-                elif isinstance(value, basestring):
-                    list_[index] = resolve_str(list_[index])
-
-            return list_
-
-        def resolve_dict(dict_):
-            for key, value in list(dict_.items()):
-                if isinstance(value, dict):
-                    dict_[key] = resolve_dict(value)
-                elif isinstance(value, list):
-                    dict_[key] = resolve_list(value)
-                elif isinstance(value, basestring):
-                    dict_[key] = resolve_str(value)
-
-            return dict_
-
-        # NOTE: We are assuming that we will only ever get a dict, list or a string. 
-        #   But this is not necessarily true. We should instead check for dict-like objects,
-        #   or list-like objects. 
+        # FIXME(TM): Should this deep copy? We're currently changing lists +
+        # dicts in place.
+        replaced_value = value
 
         if isinstance(value, dict):
-            replaced_value = resolve_dict(value)
+            for key, dict_value in list(value.items()):
+                replaced_value[key] = self.resolve(dict_value)
+
         elif isinstance(value, list):
-            replaced_value = resolve_list(value)
+            for index, list_value in list(enumerate(value)):
+                replaced_value[index] = self.resolve(list_value)
+
         elif isinstance(value, basestring):
-            replaced_value = resolve_str(value)
+            replaced_value = self._replace_replacements(value)
+            replaced_value = self._resolve_prefix(replaced_value)
 
         return replaced_value
 
