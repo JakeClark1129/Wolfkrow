@@ -694,7 +694,7 @@ sys.exit(ret)""".format(
         resolver = Resolver(replacements, resolver_search_paths, sgtk=sgtk)
 
         if replacements:
-            data_dict = resolver.resolve(data_dict)
+            resolver.resolve(data_dict)
         else:
             #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
             pass
