@@ -43,7 +43,7 @@ class TestSequenceTask(WolfkrowTestCase):
 
         t1 = TestSequence(name="Task1", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test")
 
-        exported = t1.export_to_command_line()
+        exported = t1.export_to_command_line("Test")
 
         # Count the amount of tasks there should be
         expected_export_count = int(math.ceil(float(t1.end_frame - t1.start_frame) / t1.chunk_size))
