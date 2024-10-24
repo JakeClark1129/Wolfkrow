@@ -436,9 +436,9 @@ class Task(with_metaclass(TaskType, object)):
 
             # Include the start + end frames, as we want Deadline to be able to
             # replace them for chunked jobs
-            if "start_frame" not in (None, "None"):
+            if start_frame not in (None, "None"):
                 task_args.append("--start_frame \"%s\"" % start_frame)
-            if "end_frame" not in (None, "None"):
+            if end_frame not in (None, "None"):
                 task_args.append("--end_frame \"%s\"" % end_frame)
 
             task_args.append("--json_args_file \"%s\"" % json_file_path)
