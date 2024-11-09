@@ -1,4 +1,4 @@
-1.8.0
+1.7.0
 
 Welcome to Wolfkrow's First official release notes! This is a fairly big one that brings Wolfkrow much closer to being useful as a standalone tool.
 Development will be picking up for the coming Months/Years so be sure to reach out if you have any questions or bug reports.
