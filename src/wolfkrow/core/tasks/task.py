@@ -7,18 +7,18 @@ import ast
 import collections
 import copy
 import datetime
+import errno
 import json
 import logging
 import os
-import six
 import textwrap
 import traceback
 
 from weakref import WeakKeyDictionary
 
 from wolfkrow.core.engine.resolver import Resolver
+from wolfkrow.core.engine.task_export import TaskExport
 from wolfkrow.core.tasks.task_exceptions import TaskException
-from wolfkrow.core import utils
 from future.utils import with_metaclass
 
 
@@ -66,7 +66,7 @@ class TaskAttribute(object):
         self.description = description
         self.required = required
 
-    def __get__(self, instance, instance_type=None):
+    def __get__(self, instance, instance_type=None, resolve=True):
         """ Getter function. Will return the stored value for the specified instance
             if it exists, otherwise it will return the default_value
         """
@@ -85,6 +85,14 @@ class TaskAttribute(object):
                 # Also assign it so the next time we retrieve this object, we get 
                 # our copy, rather than a new fresh copy.
                 self.data[instance] = data
+
+            # Only resolve if we:
+            #     1. Have data to resolve
+            #     2. Are told to resolve
+            #     3. Have a resolver to resolve with
+            if data and resolve is True and hasattr(instance, "resolver"):
+                data = self.resolve(instance, data)
+
             return data
         else:
             # If we get this attribute from the class level, then we return the 
@@ -96,23 +104,27 @@ class TaskAttribute(object):
     def __set__(self, instance, value):
         """ Setter function. Will set the given value in the data dictionary using 
             the instance as the key in the dictionary.
-            
-            Note: This method will first check that the type of the value matches 
-                the type that this TaskAttribute instance is expecting, or that 
-                the value set is one of options.
-            
-            Note: Since it is common for values parsed from a configuration file 
-                to be read as a string, we will first try to convert the type of 
-                the argument to the correct type before dismissing it as the 
-                incorrect type.
         """
 
+        # Don't set the value if it is None
         if value is None:
             return
 
-        # Make sure that the attribute value is acceptable
+        # Set the data for the task_attribute.
+        self.data[instance] = value
 
-        # If there is options, make sure the value is one of them.
+    def resolve(self, instance, value):
+        """ Uses the resolver from the Task instance to resolve any replacements
+        found in the value, and then converts it to the correct type.
+        """
+
+        # Get the resolver from the Task instance
+        resolver = instance.resolver
+
+        # Resolve any replacements in the value
+        value = resolver.resolve(value)
+
+        # If there are options, make sure the value is one of them.
         if self.attribute_options is not None:
             if value not in self.attribute_options:
                 # Need to make some extra effort to be certain that it is not actually there...
@@ -120,7 +132,7 @@ class TaskAttribute(object):
                 for option in self.attribute_options:
                     try:
                         # Attempt to convert to the type of the option, then check value.
-                        converted_value = self._convert_to_type(value, type(option))
+                        converted_value = self.convert_to_type(value, type(option))
                         if converted_value == option:
                             passed = True
                             value = converted_value
@@ -133,11 +145,14 @@ class TaskAttribute(object):
         # Check to make sure that the value is the correct type
         if self.attribute_type is not None:
             # Need to make some extra effort to be certain that it does not match...
-            value = self._convert_to_type(value, self.attribute_type)
+            value = self.convert_to_type(value, self.attribute_type)
 
-        self.data[instance] = value
+        # And finally, we return the value. Let the calling function decide whether 
+        # or not to set the resolved value back on the TaskAttribute.
+        return value
 
-    def _convert_to_type(self, value, attribute_type):
+    @classmethod
+    def convert_to_type(cls, value, attribute_type):
         """ Utility function to attempt to convert an object to a specific type.
 
             Note: Only tested to work with the standard python types.
@@ -172,7 +187,7 @@ class TaskAttribute(object):
                 # Attempt to convert the value to the correct type.
                 value = attribute_type(value)
             except TypeError:
-                raise TypeError("Invalid type '%s' received. Expected %s" % (type(value), attribute_type))
+                raise TypeError("Invalid type '%s' received. Expected '%s'" % (type(value), attribute_type))
 
         return value
 
@@ -224,7 +239,10 @@ class Task(with_metaclass(TaskType, object)):
     """
 
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
+    name_prefix = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
+    external_dependencies = TaskAttribute(default_value="", configurable=False, attribute_type=str, serialize=False,
+        description="""Comma separated list of dependency ID's that are not part of the task graph. These are the ID's of existing tasks which must be completed before this task can start. Currently only relevant for Deadline submission.""")
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
     resolver_search_paths = TaskAttribute(default_value=[], configurable=False, attribute_type=list)
     config_files = TaskAttribute(
@@ -252,11 +270,21 @@ class Task(with_metaclass(TaskType, object)):
                 dependencies list[str]: List of other task names that this task depends on
                 replacements: dict{str: str}: A dictionary of values that will be used by the task object later on.
         """
+        # Create a copy of the replacements. Every task should be responsible for 
+        # it's own replacements after creation.
+        replacements = kwargs.get("replacements", {})
+        kwargs["replacements"] = replacements.copy()
 
+        # And use the resolved kwargs to set the task attributes.
         for arg in kwargs:
             attribute = self.task_attributes.get(arg)
             if attribute is not None:
                 self.__setattr__(arg, kwargs[arg])
+
+        # Build the resolver for future use. Every task should get it's own, and
+        # each tasks resolver is responsible for resolving any replacements used
+        # within the task.
+        self.resolver = Resolver(self.replacements, self.resolver_search_paths, sgtk=self.sgtk)
 
         if self.python_script_executable is None:
             self.python_script_executable = os.environ.get("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE")
@@ -269,6 +297,22 @@ class Task(with_metaclass(TaskType, object)):
         
         if self.command_line_executable_args is None:
             self.command_line_executable_args = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE_ARGS")
+
+    @property
+    def task_name(self):
+        """ Returns the name of the task. """
+        if not self.name_prefix:
+            return self.name
+
+        return self.name_prefix + "_" + self.name
+
+    def add_dependency(self, task_name):
+        # We need to get the dependencies without resolving them. This is because 
+        # the resolver only returns a copy of the resolved value, so when we update
+        # the dependency next, we will only be updating the copy.
+        dependencies = Task.dependencies.__get__(self, resolve=False)
+
+        dependencies.append(task_name)
 
     def copy(self):
         """ Creates a copy of itself.
@@ -377,7 +421,7 @@ class Task(with_metaclass(TaskType, object)):
         """
         return attribute_value
 
-    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False):
+    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False, export_json=True):
         """
         Generates a `wolfkrow_run_task` command line command to run in order to
         re-construct and run this task via command line.
@@ -415,7 +459,7 @@ class Task(with_metaclass(TaskType, object)):
 
         task_args = []
 
-        if os.path.basename(self.command_line_executable).startswith("wolfkrow_run_task"):
+        if export_json:
             # If the executable is Wolfkrow, then write all the args to a JSON
             # file and pass the path in as a single arg
             json_file_path = self._get_script_path(
@@ -454,19 +498,18 @@ class Task(with_metaclass(TaskType, object)):
                     )
                 )
 
-        task_args_string = " ".join(task_args)
-
-        command = (
-            "{executable} {executable_args} "
-            "--task_name {task_type} {task_args}".format(
-                executable=self.command_line_executable,
-                executable_args=self.command_line_executable_args or "",
-                task_type=self.__class__.__name__,
-                task_args=task_args_string,
-            )
+        # Now put together the arg string
+        arg_str = "--task_name {task_name} ".format(task_name=self.__class__.__name__)
+        arg_str += " ".join(task_args)
+        
+        exported_task = TaskExport(
+            self, 
+            executable=self.command_line_executable, 
+            executable_args=self.command_line_executable_args,
+            args=arg_str
         )
 
-        return [(self, command)]
+        return [exported_task]
 
     def _generate_bash_script_contents(self, job_name, temp_dir=None, deadline=False):
         """
@@ -592,14 +635,14 @@ sys.exit(ret)""".format(
 
         return [(self, file_path)]
 
-    def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
+    def export(self, export_type="Json", temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
             synchronous execution of many tasks among many machines. Intended 
             to be used alongside a distributed render manager (Something like 
             Tractor2, or deadline).
 
             Args:
-                export_type (str): One of "CommandLine" or "PythonScript". chooses which type of export is desired.
+                export_type (str): *Deprecated* Should be "Json". All other export methods are deprecated.
             
             Kwargs:
                 temp_dir (str): Passed onto the PythonScript export method. 
@@ -617,6 +660,18 @@ sys.exit(ret)""".format(
         if self.temp_dir is None:
             self.temp_dir = temp_dir
 
+        # Also add the temp_dir to our replacements if we don't already have one.
+        if "temp_dir" not in self.replacements:
+            self.update_replacements({"temp_dir": self.temp_dir})
+
+        # Now we have the final temp dir. Lets make sure it exists:
+        try:
+            if not os.path.exists(self.temp_dir):
+                os.makedirs(self.temp_dir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+
         exported_tasks = []
 
         # Export the sub tasks
@@ -631,7 +686,13 @@ sys.exit(ret)""".format(
 
         # Export the parent task.
         if export_type == "CommandLine":
-            exported_tasks.extend(self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline))
+            exported_tasks.extend(
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=False)
+            )
+        elif export_type == "Json":
+            exported_tasks.extend(
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+            )
         elif export_type == "BashScript":
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
@@ -677,7 +738,21 @@ sys.exit(ret)""".format(
         return []
 
     def update_replacements(self, new_replacements):
-        pass
+        """ Updates the replacements dictionary with the new_replacements dictionary. 
+
+            Args:
+                new_replacements (dict): The dictionary of replacements to update with.
+        """
+
+        # We need to get the replacements without resolving them. This is because 
+        # the resolver only returns a copy of the resolved value, so when we update
+        # the replacements next, we will only be updating the copy.
+        replacements = Task.replacements.__get__(self, resolve=False)
+
+        replacements.update(new_replacements)
+
+        # Tell the resolver that our replacements have changed, so that it can re-resolve the replacements.
+        self.resolver.refresh_replacements()
 
     def __repr__(self):
         """ Official string representation of self.
@@ -731,14 +806,6 @@ sys.exit(ret)""".format(
         # a {temp_dir} replacement
         if temp_dir and "temp_dir" not in replacements:
             replacements["temp_dir"] = temp_dir
-
-        resolver = Resolver(replacements, resolver_search_paths, sgtk=sgtk)
-
-        if replacements:
-            data_dict = resolver.resolve(data_dict)
-        else:
-            #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
-            pass
 
         # Do not add NoneType values to the dictionary, so we can use the default TaskAttribute values instead.
         filtered_data_dict = {}

@@ -1,16 +1,5 @@
-import collections
-import copy
-import datetime
-import logging
-import os
-import six
-import traceback
-
-
-from weakref import WeakKeyDictionary
-
 from wolfkrow.core.tasks.task import Task, TaskAttribute
-from wolfkrow.core.tasks.task_exceptions import TaskException, TaskValidationException
+from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
 class SequenceTask(Task):
     """ Base task for all sequence tasks. Will run method for each frame in the 

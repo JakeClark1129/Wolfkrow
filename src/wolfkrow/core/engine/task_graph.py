@@ -32,7 +32,7 @@ class TaskGraph(object):
     """ Provides an interface to build, and execute a series of tasks.
     """
 
-    def __init__(self, name, replacements=None, temp_dir=None, settings_file=None):
+    def __init__(self, name, replacements=None, temp_dir=None, settings_file=None, prefix=None):
         """ Initializes TaskGraph object.
 
             Args: 
@@ -50,15 +50,28 @@ class TaskGraph(object):
         settings_manager = utils.WolfkrowSettings(settings_file=settings_file)
         self._settings = settings_manager.settings
         self._tasks = {}
+        self._prefix = prefix
         self.name = name
         self.replacements = replacements or {}
         self.temp_dir = temp_dir
 
-    def add_task(self, task):
+    def add_task(self, task, prefix=None):
         """ Adds a task to the task dictionary, and to the graph network.
 
-            Note: When adding a task to the task graph, we will also add all the tasks dependencies to the graph regardless of whether or not
-            the Task Object exists.
+        Also tracks dependencies between tasks. Note on dependencies:
+
+        There are 2 modes of dependency tracking, inheritance based, and non-inheritance based.
+        The difference comes into play when tasks have pre-fixes assigned (Typically
+        when merging task graphs). 
+        *Non-Inheritance*: When a task has a prefix, it will only have dependencies 
+            from tasks with the same prefix. 
+        *Inheritance*: Prefixes are no longer relevant in this mode (For dependencies). 
+            Tasks will inherit dependencies from all tasks in the graph, which
+            share the same name.
+
+        This dependency inheritance is handled later during the export process. 
+        For now we only track the dependencies based on the based on the name, and
+        not the prefix + name combo.
 
             Args:
                 task (Task): Task Object to add.
@@ -66,29 +79,45 @@ class TaskGraph(object):
             Raises:
                 TaskGraphException: Task Name in Graph is not Unique.
         """
+        if prefix:
+            # If this task already has a prefix, then we need to add the new 
+            # prefix to the existing prefix.
+            if task.name_prefix:
+                task.name_prefix = prefix + "_" + task.name_prefix
+            else:
+                task.name_prefix = prefix
 
-        if self._tasks.get(task.name) is None:
-            self._tasks[task.name] = task
+        if self._tasks.get(task.task_name) is None:
+            self._tasks[task.task_name] = task
         else:
-            raise TaskGraphException("Task Name is not Unique: %s." % task.name)
+            raise TaskGraphException("Task Name is not Unique: %s." % task.task_name)
 
+        # Add the task to the graph.
         self._graph.add_node(task.name)
 
         # Edges are added such that when the task graph is built it goes from 
         # "depended on task => dependent task". This results in the most 
-        # depended on tasks being at the top of the tree when sorting Topologically. 
+        # depended on tasks being at the top of the tree when sorting topologically. 
         # which will result in the correct order of task execution
-        edges = [(dependency, task.name) for dependency in task.dependencies]
+        edges = []
+        for dependency in task.dependencies:
+            edges.append((dependency, task.name))
+
+        # Add the edges to the graph.
         self._graph.add_edges_from(edges)
 
-    def add_tasks(self, tasks):
+    def add_tasks(self, tasks, prefix=None):
         for task in tasks:
-            self.add_task(task)
+            self.add_task(task, prefix=prefix)
+
+    def merge_task_graph(self, task_graph, prefix=None):
+        self.add_tasks(task_graph._tasks.values(), prefix=prefix)
 
     def add_dependency(self, task, dependency):
         """ Adds an additional dependency to a task already in the task graph.
         """
-        task.dependencies.append(dependency)
+        task.add_dependency(dependency)
+
         self._graph.add_edge(dependency, task.name)
 
     def validate_task_graph(self):
@@ -101,7 +130,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self, export_type="Json", temp_dir=None, deadline=False):
+    def export_tasks(self, export_type="Json", temp_dir=None, deadline=False, dependency_inheritance=True):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -141,83 +170,37 @@ class TaskGraph(object):
                 deadline=deadline,
             )
 
-            # This is no longer true. We need a special case to handle chunked jobs now.
-            # # If the task export returns a list, that means it was a task which 
-            # # expanded into multiple other tasks. We need to add these new tasks 
-            # # to the task_graph.
-            # if isinstance(exported, list):
-            #     for exported_task in exported:
-            #         self.add_task(exported_task[0])
-            #     # Search the task graph for tasks which dependend on the original 
-            #     # task, and update them to depend on the new tasks.
-            #     for task2 in self._tasks.values():
-            #         if task.name in task2.dependencies:
-            #             for exported_task in exported:
-            #                 self.add_dependency(task2, exported_task[0].name)
-            # else:
-            #     exported = [exported]
-
-            exported_task_names = [export[0].name for export in exported]
+            exported_task_names = [export.task.task_name for export in exported]
 
             if len(exported) > 1:
                 for exported_task in exported[1:]:
-                    self.add_task(exported_task[0])
+                    self.add_task(exported_task.task, prefix=self._prefix)
                     # Update the new tasks to depend on the original task.
-                    self.add_dependency(exported_task[0], task.name)
+                    self.add_dependency(exported_task.task, task.name)
 
-                # Search the task graph for tasks which dependend on the original 
+                # Search the task graph for tasks which depended on the original 
                 # task, and update them to depend on the new tasks.
                 for task2 in list(self._tasks.values()):
                     # Do not add a dependency to yourself.
-                    if task2.name == task.name:
+                    if task2.task_name == task.task_name:
                         continue
 
                     # Do not add dependencies to tasks that we just added to the task graph.
-                    if task2.name in exported_task_names:
+                    if task2.task_name in exported_task_names:
                         continue
 
                     if task.name in task2.dependencies:
                         for exported_task in exported[1:]:
-                            self.add_dependency(task2, exported_task[0].name)
+                            self.add_dependency(task2, exported_task.task.name)
 
             for exported_task in exported:
-                if export_type == "CommandLine":
-                    command_bits = exported_task[1].split()
-                    executable = command_bits[0]
-                    args = command_bits[1:]
-                    exported_tasks[exported_task[0].name] = {
-                        "executable": executable,
-                        "executable_args": args,
-                        "script": None,
-                        "obj": exported_task[0],
-                    }
-                elif export_type == "BashScript":
-                    command_bits = exported_task[1].split()
-                    executable = command_bits[0]
-                    args = command_bits[1:]
-                    if deadline:
-                        # Deadline needs special tokens for quotes in order to work correctly.
-                        executable = "<QUOTE>{}<QUOTE>".format(executable)
+                # Add this task to the exported tasks
+                exported_tasks[exported_task.task.task_name] = exported_task
 
-                    # If there were args, then add them back to the script executable
-                    if args:
-                        executable = "{} {}".format(executable, " ".join(args))
-
-                    exported_tasks[exported_task[0].name] = {
-                        "executable": "bash",
-                        "executable_args": None,
-                        "script": executable,
-                        "obj": exported_task[0],
-                    }
-                elif export_type == "PythonScript":
-                    exported_tasks[exported_task[0].name] = {
-                    "executable": task.python_script_executable,
-                    "executable_args": task.python_script_executable_args,
-                    "script": exported_task[1],
-                    "obj": exported_task[0],
-                }
-                else:
-                    raise TaskGraphException("Unknown Export Type! Received: {}".format(export_type))
+                # Deadline needs special tokens for quotes in order to work correctly.
+                if deadline and export_type == "BashScript" :
+                    executable = "<QUOTE>{}<QUOTE>".format(exported_task.executable)
+                    exported_task.executable = executable
 
         return exported_tasks
 
@@ -239,14 +222,15 @@ class TaskGraph(object):
                 continue
 
             ready = True
-            for dependencyName in task['obj'].dependencies:
+            for dependencyName in task.task.dependencies:
+                #TODO: Add dependency inheritance support + corrected logic around task name prefixes
                 # If the dependency has no entry, it means it was never actually added it to the task graph.
                 if results.get(dependencyName) is False:
                     ready = False
                     break
 
             if not ready:
-                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task['obj'].name)
+                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.task.task_name)
                 continue
 
             args = []
@@ -271,11 +255,11 @@ class TaskGraph(object):
             stdout, stderr = process.communicate()
 
             if process.returncode == 0:
-                logging.info("Task '%s' Successfully completed" % task['obj'].name)
-                results[task['obj'].name] = True
+                logging.info("Task '%s' Successfully completed" % task['obj'].task_name)
+                results[task['obj'].task_name] = True
             else:
-                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task['obj'].name)
-                results[task['obj'].name] = False
+                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task['obj'].task_name)
+                results[task['obj'].task_name] = False
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
@@ -333,6 +317,7 @@ class TaskGraph(object):
         additional_job_attributes=None,
         temp_dir=None,
         export_type="Json",
+        dependency_inheritance=True,
     ):
         """ Executes a task graph on deadline. 
 
@@ -345,6 +330,9 @@ class TaskGraph(object):
                     merged and this one take priority)
                 temp_dir (str): Temp directory to use as each tasks temp_dir.
                 export_type (str): The export format for tasks to use.
+                dependency_inheritance (bool): Whether or not to inherit dependencies 
+                    from tasks with a different prefix. Typically only relevant when
+                    Tasks from multiple TaskGraphs are merged into a single TaskGraph.
         """
 
         # Initialize the environment as an empty dict if nothing was passed in.
@@ -358,11 +346,11 @@ class TaskGraph(object):
 
         def submit_task_to_deadline(task, deadline, dependencies, batch_name=None, frames=None):
             dependencies_str = ",".join(dependencies)
-            batch_name = batch_name or self.name
+            batch_name = batch_name or self.task_name
 
             # Initialize the base job_attrs for a CommandLine Deadline Job.
             job_attrs = {
-                "Name": task['obj'].name,
+                "Name": task.task.task_name,
                 "BatchName": batch_name,
                 "Plugin": "CommandLine",
                 "JobDependencies": dependencies_str,
@@ -375,26 +363,59 @@ class TaskGraph(object):
 
             # Finally, add the additional job attributes from the configuration file.
             additional_job_attrs = self._get_additional_job_attrs(
-                replacements=task["obj"].replacements,
-                sgtk=task["obj"].sgtk,
-                task_type=task["obj"].__class__.__name__
+                replacements=task.task.replacements,
+                sgtk=task.task.sgtk,
+                task_type=task.task.__class__.__name__
             )
             job_attrs.update(additional_job_attrs)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
-            if (hasattr(task["obj"], "start_frame") and task["obj"].start_frame is not None and
-                hasattr(task["obj"], "end_frame") and task["obj"].end_frame is not None and
-                hasattr(task["obj"], "chunk_size") and task["obj"].chunk_size is not None
+            if (hasattr(task.task, "start_frame") and task.task.start_frame is not None and
+                hasattr(task.task, "end_frame") and task.task.end_frame is not None and
+                hasattr(task.task, "chunk_size") and task.task.chunk_size is not None
             ):
-                job_attrs['Frames'] = "{}-{}".format(task["obj"].start_frame, task["obj"].end_frame)
-                job_attrs['ChunkSize'] = task["obj"].chunk_size  
+                job_attrs['Frames'] = "{}-{}".format(task.task.start_frame, task.task.end_frame)
+                job_attrs['ChunkSize'] = task.task.chunk_size  
                 # Override chunk size to the total frame count if it is 0 or None
-                if task["obj"].chunk_size and task["obj"].chunk_size == 0:
-                    job_attrs['ChunkSize'] = task["obj"].end_frame - task["obj"].start_frame + 1
+                if task.task.chunk_size and task.task.chunk_size == 0:
+                    job_attrs['ChunkSize'] = task.task.end_frame - task.task.start_frame + 1
 
             environment_dict = {}
             if inherit_environment:
-                environment_dict = dict(os.environ)
+                # First we apply the filters from our settings.
+                inclusion_filters = self._settings.get("deadline", {}).get("environment_inclusion_filters", [])
+                exclusion_filters = self._settings.get("deadline", {}).get("environment_exclusion_filters", [])
+                inclusion_list = self._settings.get("deadline", {}).get("environment_inclusion_list", [])
+                exclusion_list = self._settings.get("deadline", {}).get("environment_exclusion_list", [])
+
+                import fnmatch
+
+                # Build the initial list of included keys. Includes all by default.
+                filtered_environment_keys = []
+                if inclusion_filters:
+                    for inclusion_filter in inclusion_filters:
+                        filtered = fnmatch.filter(os.environ.keys(), inclusion_filter)
+                        filtered_environment_keys.extend(filtered)
+                else:
+                    filtered_environment_keys = os.environ.keys()
+
+                # Now remove stuff which matches the exclusion filters
+                excluded = set()
+                if exclusion_filters:
+                    for exclusion_filter in exclusion_filters:
+                        filtered = fnmatch.filter(filtered_environment_keys, exclusion_filter)
+                        excluded.union(set(filtered))
+
+                # Also remove stuff which is explicitly excluded
+                if exclusion_list:
+                    excluded.union(set(exclusion_list))
+
+                # Now add stuff which is explicitly included
+                if inclusion_list:
+                    filtered_environment_keys.extend(inclusion_list)
+
+                # Now finally build the environment:
+                environment_dict = { key: os.environ[key] for key in filtered_environment_keys if key not in excluded }
 
             environment_dict.update(environment)
 
@@ -404,16 +425,9 @@ class TaskGraph(object):
                 job_attrs['EnvironmentKeyValue%s' % var_index] = "%s=%s" % (key, value)
                 var_index += 1
 
-            if task['executable_args']:
-                arguments = " ".join(task['executable_args'])
-                if task.get("script") is not None:
-                    arguments = arguments + " " + task['script']
-            elif task.get("script") is not None:
-                arguments = " " + task['script']
-
             plugin_attrs = {
-                "Executable":task['executable'],
-                "Arguments":arguments,
+                "Executable": task.executable,
+                "Arguments": task.args,
             }
 
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
@@ -421,40 +435,83 @@ class TaskGraph(object):
                 print("Failed to submit job. {}".format(job))
                 return None
             else:
-                print("Job: {} - {}".format(job.get("Name"), job["_id"]))
+                print("Job: {:<55} - {}".format(job.get("Props").get("Name"), job["_id"]))
                 return job
 
 
         exported_tasks = self.export_tasks(
             export_type=export_type, 
             temp_dir=temp_dir, 
-            deadline=True, 
+            deadline=True,
+            dependency_inheritance=dependency_inheritance,
         )
         deadline_jobs = {}
 
         taskExecutionOrder = networkx.topological_sort(self._graph)
         for task_name in taskExecutionOrder:
-            task = exported_tasks.get(task_name)
-            if task is None:
+            tasks = []
+            # The task graph does not deal with prefixes, so we need to get all
+            # task exports which have this task_name (without prefix).
+            # We will correct the task dependencies later depending on whether or
+            # not inheritance is enabled.
+            for task_export in exported_tasks.values():
+                if task_export.task.name == task_name:
+                    tasks.append(task_export)
+
+            if len(tasks) == 0:
                 logging.debug("Skipping Task '%s' because it was added as a dependency, but was never added to the TaskGraph." % task_name)
                 continue
 
-            job_dependencies = []
-            for dependency_name in task['obj'].dependencies:
-                # If the dependency has no deadline_id, it means it was never actually added it to the task graph.
-                dependency = exported_tasks.get(dependency_name)
-                if dependency and "deadline_id" in dependency:
-                    job_dependencies.append(dependency['deadline_id'])
+            for task in tasks:
+                job_dependencies = []
+                def add_dependency(dependency_name):
+                    # If the dependency has no deadline_id, it means it was never actually added it to the task graph.
+                    dependency = exported_tasks.get(dependency_name)
+                    if dependency and dependency.deadline_id is not None:
+                        job_dependencies.append(dependency.deadline_id)
 
-            deadline_job = submit_task_to_deadline(
-                task, 
-                deadline, 
-                job_dependencies, 
-                batch_name=batch_name
-            )
-            if deadline_job:
-                deadline_jobs[task_name] = deadline_job
-                task['deadline_id'] = deadline_job["_id"]
+                for dependency_name in task.task.dependencies:
+                    if dependency_inheritance:
+                        # If dependency inheritance is turned on, then we must look
+                        # at all the exported tasks to see if the tasks name matches
+                        # our dependency. This is for when multiple task graphs have
+                        # been merged into a single task graph. There may be cases
+                        # where we want tasks in our original task graph to depend on
+                        # tasks in the merged task graph.
+                        # Ex: A Plate Publish TaskGraph is merged with a Grade Publish,
+                        #   TaskGraph and we want the plate quicktime generation to 
+                        #   depend on the grade publish.
+                        for exported_task_name in exported_tasks:
+                            exported_task = exported_tasks[exported_task_name]
+                            if exported_task.task.name == dependency_name:
+                                add_dependency(exported_task_name)
+                    else:
+                        # If dependency inheritance is turned off, then we only want 
+                        # tasks to depend on tasks with the same prefix as themselves.
+                        # This will be useful in cases where multiple TaskGraphs of 
+                        # the same workflow have been merged. In these cases we want
+                        # the tasks to ignore the tasks from the other merged TaskGraphs.
+                        # Ex: A Plate Publish task Graph is merged with another Plate
+                        #   Publish task graph. In this case, we want the plate quicktime
+                        #   generation to depend on its own plate generation task, but no
+                        #   other plate generation tasks.
+                        dependency_name = task.task.name_prefix + "_" + dependency_name
+                        add_dependency(dependency_name)
+
+                # If there are any external dependency ID's, add them to the job_dependencies list as well.
+                if task.task.external_dependencies:
+                    external_dependencies = task.task.external_dependencies.split(",")
+                    job_dependencies.extend(external_dependencies)
+
+                deadline_job = submit_task_to_deadline(
+                    task, 
+                    deadline, 
+                    job_dependencies, 
+                    batch_name=batch_name
+                )
+                if deadline_job:
+                    deadline_jobs[task_name] = deadline_job
+                    task.deadline_id = deadline_job["_id"]
 
         return deadline_jobs
 
@@ -499,14 +556,14 @@ class TaskGraph(object):
                     break
             
             if not ready:
-                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.name)
+                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.task_name)
                 continue
 
             #Run the task
             result = task()
-            results[task.name] = result
+            results[task.task_name] = result
             if result is False:
-                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task.name)
+                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task.task_name)
             else:
-                logging.info("Task '%s' Successfully completed" % task.name)
+                logging.info("Task '%s' Successfully completed" % task.task_name)
 
