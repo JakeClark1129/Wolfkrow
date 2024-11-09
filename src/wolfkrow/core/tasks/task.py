@@ -196,6 +196,19 @@ class TaskAttribute(object):
 
         return value
 
+
+class TaskIO(TaskAttribute):
+    def __init__(self, attribute_options=None, attribute_type=None, description=None):
+        super(TaskIO, self).__init__(
+            default_value=None, 
+            configurable=False, 
+            attribute_options=None,
+            attribute_type=attribute_type,
+            required=False,
+            serialize=False,
+            description=description,
+        )
+
 class TaskType(type):
 
     def __new__(meta, name, bases, dct):
@@ -266,9 +279,13 @@ class Task(with_metaclass(TaskType, object)):
 
     python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    sgtk = TaskAttribute(default_value=None, configurable=False, serialize=False)
+    command_line_executable =       TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    command_line_executable_args =  TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+    sgtk =                          TaskAttribute(default_value=None, configurable=False, serialize=False)
+
+    # Define the inputs and outputs for a Task.
+    inputs = []
+    outputs = []
 
     def __init__(self, **kwargs):
         """ Initializes Task object

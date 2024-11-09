@@ -15,7 +15,7 @@ import tempfile
 
 from wolfkrow.core import utils
 from wolfkrow.core.engine.resolver import Resolver
-
+from wolfkrow.core.engine import sql_utils
 logging.basicConfig(level=logging.WARNING)
 
 class TaskGraphException(Exception):
@@ -195,13 +195,16 @@ class TaskGraph(object):
                             self.add_dependency(task2, exported_task.task.name)
 
             for exported_task in exported:
-                # Add this task to the exported tasks
-                exported_tasks[exported_task.task.full_name] = exported_task
+                # First we register the task in the wolfkrow db.
+                id = sql_utils.register_task(exported_task[0], self._settings)
+                
+                # # Add this task to the exported tasks
+                # exported_tasks[exported_task.task.full_name] = exported_task
 
-                # Deadline needs special tokens for quotes in order to work correctly.
-                if deadline and export_type == "BashScript" :
-                    executable = "<QUOTE>{}<QUOTE>".format(exported_task.executable)
-                    exported_task.executable = executable
+                # # Deadline needs special tokens for quotes in order to work correctly.
+                # if deadline and export_type == "BashScript" :
+                #     executable = "<QUOTE>{}<QUOTE>".format(exported_task.executable)
+                #     exported_task.executable = executable
 
         return exported_tasks
 

@@ -16,6 +16,7 @@ deadline:
     ExtraInfo2: "$WORKSPACE_PATH"
     UserName: "$USER"
 
+
   environment_inclusion_filters:
     - TK_* # Toolkit environment variables
     - "*OCIO*" # Include everything relating to ocio
@@ -30,3 +31,9 @@ nuke_submitter:
   # NOTE: $TEMP here will typically be a local drive. This will need to change to 
   # a location accessible by your farm machines if submitting jobs to Deadline.
   temp_dir: "$TEMP/wolfkrow_temp"
+
+  
+wolfkrow:
+  host: localhost
+  user: wolfkrow
+  password: Gpb3s4bm
