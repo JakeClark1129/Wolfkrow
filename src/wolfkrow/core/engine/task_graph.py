@@ -101,7 +101,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self, export_type="PythonScript", temp_dir=None, deadline=False):
+    def export_tasks(self, export_type="Json", temp_dir=None, deadline=False):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -111,7 +111,7 @@ class TaskGraph(object):
             its own dependents during execution?
 
             Kwargs:
-                export_type (str): Either "PythonScript" or "CommandLine" and dictates 
+                export_type (str): *Deprecated* Should be set to Json. All other export methods are deprecated.
                     the format that the Tasks get exported to.
                 temp_dir (str): Path to use for temp files. Will default to the 
                     following values in order.
@@ -224,7 +224,7 @@ class TaskGraph(object):
     def execute_local(
         self, 
         temp_dir=None,
-        export_type="CommandLine",
+        export_type="Json",
     ):
 
         exported_tasks = self.export_tasks(export_type=export_type, temp_dir=temp_dir)
@@ -331,8 +331,8 @@ class TaskGraph(object):
         inherit_environment=True, 
         environment=None,
         additional_job_attributes=None,
-        temp_dir=None, 
-        export_type="CommandLine"
+        temp_dir=None,
+        export_type="Json",
     ):
         """ Executes a task graph on deadline. 
 

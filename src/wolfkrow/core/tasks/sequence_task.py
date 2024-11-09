@@ -163,7 +163,7 @@ class SequenceTask(Task):
         self.name = name
         return tasks
 
-    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
         """
         Generates a `wolfkrow_run_task` command line command to run in order to
         re-construct and run this task via command line.
@@ -179,6 +179,7 @@ class SequenceTask(Task):
             "job_name": job_name,
             "temp_dir": temp_dir, 
             "deadline": deadline,
+            "export_json": export_json
         }
         exported = self._export_sequence_task(
             export_method_name,

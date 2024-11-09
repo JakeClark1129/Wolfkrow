@@ -22,7 +22,12 @@ class NukeTask(Task):
             Appends a '$' to the end of the command because nuke will try to accept
             the last arguments as a frame number/range.
         """
-        exported = super(NukeTask, self).export_to_command_line(job_name, temp_dir=temp_dir, deadline=deadline)
+        exported = super(NukeTask, self).export_to_command_line(
+            job_name,
+            temp_dir=temp_dir,
+            deadline=deadline,
+            export_json=export_json
+        )
 
         updated_exported = []
         # Append a "$" to the end of the command so that nuke does not consume 
