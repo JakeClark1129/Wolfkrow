@@ -39,6 +39,10 @@ class FileOperation(Task):
         description="Start frame to renumber the destination sequence to."
     )
 
+    # Define the inputs and outputs for a Task.
+    inputs = ["file_sequence"]
+    outputs = ["file_sequence"]
+
     def __init__(self, **kwargs):
         """ Initialize the FileOperation Object
 

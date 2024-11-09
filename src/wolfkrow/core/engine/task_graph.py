@@ -14,7 +14,7 @@ import tempfile
 
 from wolfkrow.core import utils
 from wolfkrow.core.engine.resolver import Resolver
-
+from wolfkrow.core.engine import sql_utils
 logging.basicConfig(level=logging.WARNING)
 
 class TaskGraphException(Exception):
@@ -181,6 +181,9 @@ class TaskGraph(object):
                             self.add_dependency(task2, exported_task[0].name)
 
             for exported_task in exported:
+                # First we register the task in the wolfkrow db.
+                id = sql_utils.register_task(exported_task[0], self._settings)
+                
                 if export_type == "CommandLine":
                     command_bits = exported_task[1].split()
                     executable = command_bits[0]

@@ -24,6 +24,10 @@ class SequenceTask(Task):
     chunk_size = TaskAttribute(default_value=8, configurable=True, attribute_type=int, 
         description="Number of frames to split each task into for running on multiple machines. 0 to perform no chunking")
 
+    # Define the inputs and outputs for a Task.
+    inputs = ["start_frame", "end_frame"]
+    outputs = ["start_frame", "end_frame"]
+
     def __init__(self, **kwargs):
         """ Initializes Task object
         """

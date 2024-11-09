@@ -39,7 +39,7 @@ class Link(FileOperation):
         # Cannot hard link directories
         if self.link_type == "hardlink":
             if os.path.isdir(self.source):
-                raise TaskValidationException("Source {} is a directory.")
+                raise TaskValidationException("Source {} is a directory.".format(self.source))
 
             if os.path.isdir(self.destination):
                 if os.path.dirname(self.source) == os.path.dirname(self.destination):

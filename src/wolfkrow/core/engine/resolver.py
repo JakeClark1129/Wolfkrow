@@ -19,7 +19,7 @@ class ReplacementsDict(dict):
 
 class Resolver(object):
 
-    RESOLVER_TOKEN = "@resolver"
+    RESOLVER_TOKEN = "#resolver"
     SGTK_TEMPLATE_REGEX = "(SGTKTEMPLATE<)(.*)(>)"
 
     def __init__(self, replacements, search_paths, sgtk=None, resolver_token=RESOLVER_TOKEN):

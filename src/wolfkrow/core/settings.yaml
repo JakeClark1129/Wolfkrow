@@ -15,3 +15,8 @@ deadline:
     ExtraInfo1: "$WORKSPACE"
     ExtraInfo2: "$WORKSPACE_PATH"
     UserName: "$USER"
+
+wolfkrow:
+  host: localhost
+  user: wolfkrow
+  password: Gpb3s4bm

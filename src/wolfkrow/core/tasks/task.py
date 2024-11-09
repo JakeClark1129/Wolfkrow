@@ -174,6 +174,19 @@ class TaskAttribute(object):
 
         return value
 
+
+class TaskIO(TaskAttribute):
+    def __init__(self, attribute_options=None, attribute_type=None, description=None):
+        super(TaskIO, self).__init__(
+            default_value=None, 
+            configurable=False, 
+            attribute_options=None,
+            attribute_type=attribute_type,
+            required=False,
+            serialize=False,
+            description=description,
+        )
+
 class TaskType(type):
 
     def __new__(meta, name, bases, dct):
@@ -221,24 +234,28 @@ class Task(with_metaclass(TaskType, object)):
             Run -- Called immediately after the Setup method is called.
     """
 
-    name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
-    dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
-    replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
+    name =                  TaskAttribute(default_value=None, configurable=True, attribute_type=str)
+    id =                    TaskAttribute(default_value=None, configurable=False, attribute_type=int)
+    dependencies =          TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
+    replacements =          TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
     resolver_search_paths = TaskAttribute(default_value=[], configurable=False, attribute_type=list)
-    config_files = TaskAttribute(
+    config_files =          TaskAttribute(
         default_value=[],
         configurable=False,
         attribute_type=list,
         description="""List of config files used to reconstruct the Loader object on the farm."""
     )
 
-    temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
-
-    python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    temp_dir =                      TaskAttribute(default_value=None, configurable=False, attribute_type=str)
+    python_script_executable =      TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    sgtk = TaskAttribute(default_value=None, configurable=False, serialize=False)
+    command_line_executable =       TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
+    command_line_executable_args =  TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+    sgtk =                          TaskAttribute(default_value=None, configurable=False, serialize=False)
+
+    # Define the inputs and outputs for a Task.
+    inputs = []
+    outputs = []
 
     def __init__(self, **kwargs):
         """ Initializes Task object

@@ -8,7 +8,7 @@ import errno
 import logging
 import os
 
-from .task import Task, TaskAttribute
+from .task import Task, TaskAttribute, TaskIO
 from .sequence_task import SequenceTask
 from .task_exceptions import TaskValidationException
 
@@ -46,7 +46,7 @@ class NukeRender(NukeTask):
     write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
     write_node_name = TaskAttribute(default_value=None, configurable=False, attribute_type=str, 
         description="""
-    Name of the wrtie node to create/render from. If left unset, will automatically 
+    Name of the write node to create/render from. If left unset, will automatically 
     determine its own name (recommended)
         """
     )
@@ -142,6 +142,28 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             "for values to set on the root node."
     )
 
+    nuke_script = TaskIO(attribute_type=str, description="Path to the nuke script generated")
+
+    # Define the inputs and outputs for a Task.
+    inputs = {
+        "file_sequence": source, 
+        "start_frame": input_start_frame, 
+        "end_frame": input_end_frame
+    }
+    outputs = {
+        "file_sequence": destination, 
+        "start_frame": render_start_frame, 
+        "end_frame": render_end_frame, 
+        "nuke_script": nuke_script
+    }
+
+    def __init__(self, *args, **kwargs):
+        super(NukeRender, self).__init__(*args, **kwargs)
+        if self.input_start_frame and not self.render_start_frame:
+            self.render_start_frame = self.input_start_frame
+
+        if self.input_end_frame and not self.render_end_frame:
+            self.render_end_frame = self.input_end_frame
 
     def get_subtasks(self):
         """ Constructs a NukeRenderRun task which should get executed after this task.
@@ -536,9 +558,10 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 if error.errno != errno.EEXIST:
                     raise
 
+        # Assign our task output
+        self.script_path = script_path
         nuke.scriptSaveAs(script_path, overwrite=1)
         return 0
-
 
 # INFO: ===========================================================================
 # Nuke Render Run is the part of the nuke render which actually does the rendering.
@@ -568,6 +591,21 @@ class NukeRenderRun(NukeTask, SequenceTask):
         attribute_type=int, 
         description="The increments to use when rendering. Ex: 10 will render every 10th frame."
     )
+    
+
+    # Define the inputs and outputs for a Task.
+    inputs = {
+        "file_sequence": None, 
+        "start_frame": None, 
+        "end_frame": None,
+        "nuke_script": script,
+    }
+    outputs = {
+        "file_sequence": None, 
+        "start_frame": None, 
+        "end_frame": None, 
+        "nuke_script": script,
+    }
 
     def __init__(self, **kwargs):
         """ Initialize the NukeRenderRun Object
@@ -604,3 +642,7 @@ class NukeRenderRun(NukeTask, SequenceTask):
         # Execute the write node to kick off the render.
         nuke.execute(self.write_node, self.start_frame, self.end_frame, self.increment)
         return 0
+
+    def outputs(self):
+        pass
+
