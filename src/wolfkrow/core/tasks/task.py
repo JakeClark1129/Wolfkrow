@@ -591,7 +591,7 @@ sys.exit(ret)""".format(
 
         return [(self, file_path)]
 
-    def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
+    def export(self, export_type="Json", temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
             synchronous execution of many tasks among many machines. Intended 
             to be used alongside a distributed render manager (Something like 
@@ -635,6 +635,10 @@ sys.exit(ret)""".format(
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
+        elif export_type == "Json":
+            exported_tasks.extend(
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+            )
         else:
             raise TaskException("Unknown export type: {}. Expected one of 'CommandLine', 'BashScript', or 'PythonScript'".format(
                 export_type
