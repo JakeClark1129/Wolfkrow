@@ -7,9 +7,11 @@ import ast
 import collections
 import copy
 import datetime
+import json
 import logging
 import os
 import six
+import textwrap
 import traceback
 
 from weakref import WeakKeyDictionary
@@ -365,52 +367,39 @@ class Task(with_metaclass(TaskType, object)):
 
         return file_path
 
-    def _command_line_sanitize_attribute(self, attribute_name, attribute_value, deadline=False):
-        """ Processes the attribute value to prepare it for use on the command line.
-
-            Does additional processing to prepare the attribute for use on deadline.
+    def _command_line_sanitize_attribute(
+        self, attribute_name, attribute_value, deadline=False
+    ):
         """
+        Processes the attribute value to prepare it for use on the command line.
 
-        # Ensure that these types are wrapped in quotes so they are interpreted 
-        # as a single argument.
-        if (isinstance(attribute_value, dict) or
-            isinstance(attribute_value, list) or
-            isinstance(attribute_value, set)):
-
-            attribute_value = repr(attribute_value)
-
-        # Sometimes the value here will be a unicode or byte string. If that
-        # is the case, then strip the "u" or "b" qualifier at the start of 
-        # the string output of repr.
-        # TODO: We should probably properly handle these special cases properly,
-        # but this seems to work... keep an eye on this.
-        attribute_value = repr(attribute_value)
-        try:
-            if attribute_value.startswith("u'") or attribute_value.startswith("b'"):
-                attribute_value = attribute_value[1:]
-        except Exception:
-            pass
-
+        Default implementation just returns the given value.
+        """
         return attribute_value
 
-    def export_to_command_line(self, temp_dir=None, deadline=False):
-        """ Will generate a `wolfkrow_run_task` command line command to run in order to 
-            re-construct and run this task via command line. 
-
-            Args:
-                temp_dir (str): temp directory to write the stand alone python script to.
-                deadline (bool): whether or not to prepare this task for deadline.
+    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False):
         """
+        Generates a `wolfkrow_run_task` command line command to run in order to
+        re-construct and run this task via command line.
 
+        Args:
+            job_name (str): The name of the job that this task is a part of.
+                Only used to generate the script's name.
+            temp_dir (str): Temp directory to write a BASH script to
+            deadline (bool): Whether to prepare this task for Deadline.
+        """
         if self.command_line_executable is None:
-            raise TaskException("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE variable undefined and no executable specified.")
+            raise TaskException(
+                "WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE variable undefined "
+                "and no executable specified."
+            )
 
         if not self.temp_dir:
             self.temp_dir = temp_dir
 
-        arg_str = ""
+        task_args_dict = {}
 
-        for attribute_name, attribute_obj  in list(self.task_attributes.items()):
+        for attribute_name, attribute_obj in list(self.task_attributes.items()):
             if attribute_obj.serialize is False:
                 continue
 
@@ -418,49 +407,97 @@ class Task(with_metaclass(TaskType, object)):
             if value is None or value == attribute_obj.default_value:
                 continue
 
-            value = self._command_line_sanitize_attribute(attribute_name, value, deadline=deadline)
-
-            # Now put together the arg string
-            arg_str = "{arg_str} --{attribute_name} {value}".format(
-                arg_str=arg_str,
-                attribute_name=attribute_name,
-                value=value
+            sanitised_value = self._command_line_sanitize_attribute(
+                attribute_name, value, deadline=deadline
             )
 
+            task_args_dict[attribute_name] = sanitised_value
 
-        command = "{executable} {executable_args} --task_name {task_type} {task_args}".format(
-            executable=self.command_line_executable, 
-            executable_args= self.command_line_executable_args or "",
-            task_type=self.__class__.__name__, 
-            task_args=arg_str
+        task_args = []
+
+        if os.path.basename(self.command_line_executable).startswith("wolfkrow_run_task"):
+            # If the executable is Wolfkrow, then write all the args to a JSON
+            # file and pass the path in as a single arg
+            json_file_path = self._get_script_path(
+                extension="json", job_name=job_name, temp_dir=temp_dir
+            )
+
+            try:
+                with open(json_file_path, "w") as json_file:
+                    json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+
+            except Exception as exception:
+                raise TaskException(
+                    "Couldn't write args JSON file to path: %s - %s"
+                    % (json_file_path, exception)
+                )
+
+            start_frame = task_args_dict.get("start_frame")
+            end_frame = task_args_dict.get("end_frame")
+
+            # Include the start + end frames, as we want Deadline to be able to
+            # replace them for chunked jobs
+            if start_frame not in (None, "None"):
+                task_args.append("--start_frame \"%s\"" % start_frame)
+            if end_frame not in (None, "None"):
+                task_args.append("--end_frame \"%s\"" % end_frame)
+
+            task_args.append("--json_args_file \"%s\"" % json_file_path)
+
+        else:
+            # For other executables, pass the args in as "--key value" pairs
+            for attribute_name, attribute_value in task_args_dict.items():
+                task_args.append(
+                    "--{attribute_name} {value}".format(
+                        attribute_name=attribute_name,
+                        value=attribute_value
+                    )
+                )
+
+        task_args_string = " ".join(task_args)
+
+        command = (
+            "{executable} {executable_args} "
+            "--task_name {task_type} {task_args}".format(
+                executable=self.command_line_executable,
+                executable_args=self.command_line_executable_args or "",
+                task_type=self.__class__.__name__,
+                task_args=task_args_string,
+            )
         )
 
         return [(self, command)]
 
-    def _generate_bash_script_contents(self, temp_dir=None, deadline=False):
-        """ Generates the contents for a bash script export. Default implementation 
-        is just based off of the CommandLine export.
+    def _generate_bash_script_contents(self, job_name, temp_dir=None, deadline=False):
+        """
+        Generates the contents for a bash script export. Default implementation
+        is just based on the CommandLine export.
+
+        Args:
+            job_name (str): The name of the job that this task is a part of.
+                Only used to generate the script's name.
 
         Kwargs:
             temp_dir (str): temp directory to use for the command line export.
-            deadline (bool): whether or not to prepare this task for deadline.
+            deadline (bool): whether or not to prepare this task for Deadline.
         """
         command_line_export = self.export_to_command_line(
-            temp_dir=temp_dir, 
-            deadline=deadline
+            job_name=job_name, temp_dir=temp_dir, deadline=deadline
         )
 
         bash_scripts = []
-        bash_script_template ="""
-#!/usr/bin/env bash
+        bash_script_template = textwrap.dedent(
+            """
+            #!/usr/bin/env bash
 
-{command}
-"""
-        for export in command_line_export:
+            {command}
+            """
+        ).strip()
 
-            bash_script = bash_script_template.format(command=export[1])
-            bash_scripts.append((export[0], bash_script))
-        
+        for task, bash_command in command_line_export:
+            bash_script = bash_script_template.format(command=bash_command)
+            bash_scripts.append((task, bash_script))
+
         return bash_scripts
 
     def export_to_bash_script(self, job_name, temp_dir=None, deadline=False):
@@ -594,11 +631,15 @@ sys.exit(ret)""".format(
 
         # Export the parent task.
         if export_type == "CommandLine":
-            exported_tasks.extend(self.export_to_command_line(temp_dir=self.temp_dir, deadline=deadline))
+            exported_tasks.extend(self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "BashScript":
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
+        elif export_type == "Json":
+            exported_tasks.extend(
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+            )
         else:
             raise TaskException("Unknown export type: {}. Expected one of 'CommandLine', 'BashScript', or 'PythonScript'".format(
                 export_type
@@ -694,7 +735,7 @@ sys.exit(ret)""".format(
         resolver = Resolver(replacements, resolver_search_paths, sgtk=sgtk)
 
         if replacements:
-            resolver.resolve(data_dict)
+            data_dict = resolver.resolve(data_dict)
         else:
             #TODO: Warn that there was no replacements passed into the function, so no replacements will be replaced successfully.
             pass

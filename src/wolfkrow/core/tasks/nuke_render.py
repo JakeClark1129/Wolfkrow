@@ -15,14 +15,18 @@ from .task_exceptions import TaskValidationException
 from wolfkrow.core.engine.resolver import Resolver
 
 class NukeTask(Task):
-    def export_to_command_line(self, temp_dir=None, deadline=False):
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in 
             order to re-construct and run this task via command line. 
 
             Appends a '$' to the end of the command because nuke will try to accept
             the last arguments as a frame number/range.
         """
-        exported = super(NukeTask, self).export_to_command_line(deadline=deadline)
+        exported = super(NukeTask, self).export_to_command_line(
+            job_name,
+            temp_dir=temp_dir,
+            deadline=deadline,
+        )
 
         updated_exported = []
         # Append a "$" to the end of the command so that nuke does not consume 

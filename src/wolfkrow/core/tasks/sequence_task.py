@@ -90,12 +90,13 @@ class SequenceTask(Task):
 
         return value
 
-    def _generate_bash_script_contents(self, temp_dir=None, deadline=False):
+    def _generate_bash_script_contents(self, job_name, temp_dir=None, deadline=False):
         """ Overrides the default generate bash script method in order to tweak
         the bash scripts generated for use on deadline.
         """
-
-        bash_scripts = super(SequenceTask, self)._generate_bash_script_contents(temp_dir=temp_dir, deadline=deadline)
+        bash_scripts = super(SequenceTask, self)._generate_bash_script_contents(
+            job_name, temp_dir=temp_dir, deadline=deadline
+        )
 
         if deadline and self.start_frame is not None and self.end_frame is not None:
             for index, (task, bash_script) in enumerate(bash_scripts):
@@ -162,21 +163,22 @@ class SequenceTask(Task):
         self.name = name
         return tasks
 
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
+        """
+        Generates a `wolfkrow_run_task` command line command to run in order to
+        re-construct and run this task via command line.
 
-    def export_to_command_line(self, temp_dir=None, deadline=False):
-        """ Will generate a `wolfkrow_run_task` command line command to run in order to 
-            re-construct and run this task via command line. 
-
-            Args:
-                temp_dir (str): temp directory to write the stand alone python script to.
-                deadline (bool): whether or not to prepare this task for deadline.
+        Args:
+            temp_dir (str): temp directory to write the stand alone Python script to.
+            deadline (bool): whether or not to prepare this task for Deadline.
         """
 
         # We have a framed sequence task, so export the chunked tasks
         export_method_name = "export_to_command_line"
         export_method_args = {
+            "job_name": job_name,
             "temp_dir": temp_dir, 
-            "deadline": deadline
+            "deadline": deadline,
         }
         exported = self._export_sequence_task(
             export_method_name,
