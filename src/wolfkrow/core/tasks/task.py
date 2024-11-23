@@ -7,6 +7,7 @@ import ast
 import collections
 import copy
 import datetime
+import json
 import logging
 import os
 import six
@@ -591,7 +592,7 @@ sys.exit(ret)""".format(
 
         return [(self, file_path)]
 
-    def export(self, export_type="Json", temp_dir=None, job_name=None, deadline=False):
+    def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
             synchronous execution of many tasks among many machines. Intended 
             to be used alongside a distributed render manager (Something like 
@@ -630,7 +631,7 @@ sys.exit(ret)""".format(
 
         # Export the parent task.
         if export_type == "CommandLine":
-            exported_tasks.extend(self.export_to_command_line(temp_dir=self.temp_dir, deadline=deadline))
+            exported_tasks.extend(self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "BashScript":
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "PythonScript":

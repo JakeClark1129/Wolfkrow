@@ -15,7 +15,7 @@ from .task_exceptions import TaskValidationException
 from wolfkrow.core.engine.resolver import Resolver
 
 class NukeTask(Task):
-    def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in 
             order to re-construct and run this task via command line. 
 
@@ -26,7 +26,6 @@ class NukeTask(Task):
             job_name,
             temp_dir=temp_dir,
             deadline=deadline,
-            export_json=export_json
         )
 
         updated_exported = []
