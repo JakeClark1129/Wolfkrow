@@ -1,19 +1,17 @@
-""" Module implementing the FileCopy task.
+""" Module implementing the ConcatenateQuicktime task.
 """
 from __future__ import print_function
 
 from builtins import str
-from builtins import range
 import errno
 import glob
 import os
-import shutil
 import subprocess
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
 
 class ConcatenateQuicktime(Task):
-    """ FileMove Task implementation
+    """ ConcatenateQuicktime Task implementation
     """
 
     source = TaskAttribute(
@@ -32,14 +30,11 @@ class ConcatenateQuicktime(Task):
     )
 
     def __init__(self, **kwargs):
-        """ Initialize the FFMPEG Object
-
-            Args:
-        """
         super(ConcatenateQuicktime, self).__init__(**kwargs)
 
     def setup(self):
-        """ Create the FFMPEG Input file.
+        """ Ensures that the destination directory exists, and creates the ffmpeg
+        input text file which contains all the input quicktimes found.
         """
         if not os.path.exists(self.destination):
             try:
@@ -56,7 +51,7 @@ class ConcatenateQuicktime(Task):
 
         source_files = glob.glob(self.source)
 
-        self.ffmpeg_input_file_path = "/".join([self.temp_dir, self.task_name, "ffmpeg_input.txt"])
+        self.ffmpeg_input_file_path = "/".join([self.temp_dir, self.full_name, "ffmpeg_input.txt"])
 
         root = os.path.dirname(self.ffmpeg_input_file_path)
         if not os.path.exists(root):
@@ -71,11 +66,10 @@ class ConcatenateQuicktime(Task):
                 f.write("file '{}'\n".format(source_file))
 
     def run(self):
-        """ execute FFMPEG with the given arguments.
+        """ executes an FFMPEG command to concatenate the quicktimes together.
         """
 
         success = True
-        failed_frames = []
 
         ffmpeg_command = [
             "ffmpeg",

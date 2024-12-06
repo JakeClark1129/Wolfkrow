@@ -100,6 +100,9 @@ class Resolver(object):
 
         Args:
             replacements (dict): Dictionary of values to use as the replacements.
+
+        Kwargs:
+            search_paths (list): List of paths to use in place of the RESOLVER_TOKEN.
             sgtk: Optional Shotgun toolkit instance to allow the use of templates.
         """
         self.search_paths = search_paths or []
@@ -121,8 +124,9 @@ class Resolver(object):
 
             Should be called by the Task whenever it's replacements are updated.
 
-        Args:
-            replacements (dict): New dictionary of replacements to use in place of the current replacements.
+        Kwargs:
+            replacements (dict): *Optional* New dictionary of replacements to 
+                use in place of the current replacements.
         """
 
         if replacements:
@@ -143,7 +147,7 @@ class Resolver(object):
         """
 
         # First we copy the replacements so that we can modify them without affecting the original.
-        replacements = replacements.copy()
+        replacements = copy.deepcopy(replacements)
 
         # For each replacement, we iterate through all other replacements and resolve it.
         for replacement in replacements:
@@ -171,9 +175,7 @@ class Resolver(object):
             value (str, dict or list): An instance to do replacements for.
             replacements (dict): The replacements to use for replacing instead of the replacements assigned on this object.
         """
-        # Not a deep copy, but this is fine because were only ever assigning new values 
-        # to the dictionary, and not modifying existing ones.
-        replaced_value = copy.copy(value)
+        replaced_value = copy.deepcopy(value)
 
         if isinstance(value, dict):
             for key, dict_value in list(value.items()):

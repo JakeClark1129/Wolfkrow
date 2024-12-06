@@ -299,7 +299,7 @@ class Task(with_metaclass(TaskType, object)):
             self.command_line_executable_args = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE_ARGS")
 
     @property
-    def task_name(self):
+    def full_name(self):
         """ Returns the name of the task. """
         if not self.name_prefix:
             return self.name
@@ -391,13 +391,13 @@ class Task(with_metaclass(TaskType, object)):
             script_name = "{time}_{job_name}_{task_name}.{extension}".format(
                 time=now,
                 job_name=sub_space_for_underscore(job_name),
-                task_name=sub_space_for_underscore(self.name),
+                task_name=sub_space_for_underscore(self.full_name),
                 extension=extension,
             )
         else:
             script_name = "{time}_{task_name}.{extension}".format(
                 time=now,
-                task_name=sub_space_for_underscore(self.name),
+                task_name=sub_space_for_underscore(self.full_name),
                 extension=extension,
             )
 

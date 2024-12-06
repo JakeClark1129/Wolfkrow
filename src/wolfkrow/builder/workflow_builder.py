@@ -108,10 +108,7 @@ class Loader(object):
         for config_file in config_file_paths:
 
             # Replace any replacements in the config file paths.
-            # NOTE: We don't pass in any search paths yet, because they are 
-            #   configured in the wolfkrow files that were trying to find right 
-            #   now.
-            resolver = Resolver(self.replacements, [], sgtk=self._sgtk)
+            resolver = Resolver(self.replacements, sgtk=self._sgtk)
             config_file = resolver.resolve(config_file)
 
             # Check that the config file exists before loading it.

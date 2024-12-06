@@ -6,6 +6,7 @@ from __future__ import print_function
 
 from builtins import object
 import copy
+import fnmatch
 import logging
 import networkx
 import os
@@ -87,10 +88,10 @@ class TaskGraph(object):
             else:
                 task.name_prefix = prefix
 
-        if self._tasks.get(task.task_name) is None:
-            self._tasks[task.task_name] = task
+        if self._tasks.get(task.full_name) is None:
+            self._tasks[task.full_name] = task
         else:
-            raise TaskGraphException("Task Name is not Unique: %s." % task.task_name)
+            raise TaskGraphException("Task Name is not Unique: %s." % task.full_name)
 
         # Add the task to the graph.
         self._graph.add_node(task.name)
@@ -130,7 +131,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self, export_type="Json", temp_dir=None, deadline=False, dependency_inheritance=True):
+    def export_tasks(self, export_type="Json", temp_dir=None, deadline=False):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -170,7 +171,7 @@ class TaskGraph(object):
                 deadline=deadline,
             )
 
-            exported_task_names = [export.task.task_name for export in exported]
+            exported_task_names = [export.task.full_name for export in exported]
 
             if len(exported) > 1:
                 for exported_task in exported[1:]:
@@ -182,11 +183,11 @@ class TaskGraph(object):
                 # task, and update them to depend on the new tasks.
                 for task2 in list(self._tasks.values()):
                     # Do not add a dependency to yourself.
-                    if task2.task_name == task.task_name:
+                    if task2.name == task.name:
                         continue
 
                     # Do not add dependencies to tasks that we just added to the task graph.
-                    if task2.task_name in exported_task_names:
+                    if task2.full_name in exported_task_names:
                         continue
 
                     if task.name in task2.dependencies:
@@ -195,7 +196,7 @@ class TaskGraph(object):
 
             for exported_task in exported:
                 # Add this task to the exported tasks
-                exported_tasks[exported_task.task.task_name] = exported_task
+                exported_tasks[exported_task.task.full_name] = exported_task
 
                 # Deadline needs special tokens for quotes in order to work correctly.
                 if deadline and export_type == "BashScript" :
@@ -215,14 +216,14 @@ class TaskGraph(object):
         results = {}
         taskExecutionOrder = networkx.topological_sort(self._graph)
         for task_name in taskExecutionOrder:
-            task = exported_tasks.get(task_name)
-            if task is None:
+            task_export = exported_tasks.get(task_name)
+            if task_export is None:
                 logging.debug("Skipping Task '%s' because it was added as a "
                     "dependency, but was never added to the TaskGraph." % task_name)
                 continue
 
             ready = True
-            for dependencyName in task.task.dependencies:
+            for dependencyName in task_export.task.dependencies:
                 #TODO: Add dependency inheritance support + corrected logic around task name prefixes
                 # If the dependency has no entry, it means it was never actually added it to the task graph.
                 if results.get(dependencyName) is False:
@@ -230,16 +231,10 @@ class TaskGraph(object):
                     break
 
             if not ready:
-                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.task.task_name)
+                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task_export.task.full_name)
                 continue
 
-            args = []
-            args.append(task['executable'])
-            if task['executable_args']:
-                args.extend(task['executable_args'])
-            if task.get("script") and task['script'] is not None:
-                script_args = [x for x in task['script'].split(' ') if bool(x)]
-                args.extend(script_args)
+            args = task_export.as_list()
 
             #TODO: The python script being executed here can be a security liability 
             # since they can be modified between being written out, and being executed 
@@ -248,18 +243,15 @@ class TaskGraph(object):
             process = subprocess.Popen(
                 args,
                 shell=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.PIPE
             )
-            stdout, stderr = process.communicate()
+            process.communicate()
 
             if process.returncode == 0:
-                logging.info("Task '%s' Successfully completed" % task['obj'].task_name)
-                results[task['obj'].task_name] = True
+                logging.info("Task '%s' Successfully completed" % task_export.task.full_name)
+                results[task_export.task.full_name] = True
             else:
-                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task['obj'].task_name)
-                results[task['obj'].task_name] = False
+                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task_export.task.full_name)
+                results[task_export.task.full_name] = False
 
         #TODO: Cleanup the tempdir from exported_tasks.
 
@@ -344,13 +336,13 @@ class TaskGraph(object):
             self._settings["deadline"]["host_name"],
             self._settings["deadline"]["port"])
 
-        def submit_task_to_deadline(task, deadline, dependencies, batch_name=None, frames=None):
+        def submit_task_to_deadline(task_export, deadline, dependencies, batch_name=None, frames=None):
             dependencies_str = ",".join(dependencies)
-            batch_name = batch_name or self.task_name
+            batch_name = batch_name or task_export.task.full_name
 
             # Initialize the base job_attrs for a CommandLine Deadline Job.
             job_attrs = {
-                "Name": task.task.task_name,
+                "Name": task_export.task.full_name,
                 "BatchName": batch_name,
                 "Plugin": "CommandLine",
                 "JobDependencies": dependencies_str,
@@ -387,8 +379,6 @@ class TaskGraph(object):
                 exclusion_filters = self._settings.get("deadline", {}).get("environment_exclusion_filters", [])
                 inclusion_list = self._settings.get("deadline", {}).get("environment_inclusion_list", [])
                 exclusion_list = self._settings.get("deadline", {}).get("environment_exclusion_list", [])
-
-                import fnmatch
 
                 # Build the initial list of included keys. Includes all by default.
                 filtered_environment_keys = []
@@ -443,7 +433,6 @@ class TaskGraph(object):
             export_type=export_type, 
             temp_dir=temp_dir, 
             deadline=True,
-            dependency_inheritance=dependency_inheritance,
         )
         deadline_jobs = {}
 
@@ -556,14 +545,14 @@ class TaskGraph(object):
                     break
             
             if not ready:
-                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.task_name)
+                logging.warning("This task's dependencies failed to execute. Skipping task: '%s'" % task.full_name)
                 continue
 
             #Run the task
             result = task()
-            results[task.task_name] = result
+            results[task.full_name] = result
             if result is False:
-                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task.task_name)
+                logging.error("Task '%s' Failed. Will skip all dependant tasks." % task.full_name)
             else:
-                logging.info("Task '%s' Successfully completed" % task.task_name)
+                logging.info("Task '%s' Successfully completed" % task.full_name)
 
