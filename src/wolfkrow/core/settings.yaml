@@ -15,3 +15,18 @@ deadline:
     ExtraInfo1: "$WORKSPACE"
     ExtraInfo2: "$WORKSPACE_PATH"
     UserName: "$USER"
+
+  environment_inclusion_filters:
+    - TK_* # Toolkit environment variables
+    - *OCIO* # Include everything relating to ocio
+    - WOLFKROW* # Wolfkrow environment variables
+  environment_exclusion_filters:
+  environment_inclusion_list:
+    - PYTHONPATH
+    - PATH
+  environment_exclusion_list:
+
+nuke_submitter:
+  # NOTE: $TEMP here will typically be a local drive. This will need to change to 
+  # a location accessible by your farm machines if submitting jobs to Deadline.
+  temp_dir: "$TEMP/wolfkrow_temp"

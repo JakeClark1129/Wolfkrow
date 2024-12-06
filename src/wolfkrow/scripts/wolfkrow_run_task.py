@@ -7,6 +7,7 @@ from builtins import range
 import argparse
 import json
 import sys
+import os
 
 from wolfkrow.core.tasks import all_tasks
 
@@ -60,9 +61,15 @@ def parse_args():
 
     known, unknown = parser.parse_known_args()
 
+
+    task_args = {}
+
     # Load args from a JSON file
     args_file_path = known.json_args_file
     if args_file_path is not None:
+        print("Loading args from JSON file:")
+        print(args_file_path)
+
         if not os.path.isfile(args_file_path):
             message = "No such JSON file: %s" % args_file_path
             _print_and_raise(message)

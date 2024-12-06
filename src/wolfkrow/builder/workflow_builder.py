@@ -6,7 +6,7 @@ import string
 import yaml
 from ..core import tasks
 from ..core.engine.task_graph import TaskGraph
-from ..core.engine import resolver
+from ..core.engine.resolver import Resolver
 
 class LoaderException(Exception):
     """ Exception for generic Task errors
@@ -40,11 +40,6 @@ class Loader(object):
         self.replacements = replacements or {}
         self._sgtk = sgtk
         self.temp_dir = temp_dir
-
-        # Ensure that the replacements dictionary is an instance of ReplacementsDict.
-        # This is because ReplacementsDict has special logic to handle missing values
-        if not isinstance(self.replacements, resolver.ReplacementsDict):
-            self.replacements = resolver.ReplacementsDict(self.replacements)
 
     @property
     def config(self):
@@ -111,6 +106,10 @@ class Loader(object):
     def _load_configs(self, config_file_paths):
         config = {}
         for config_file in config_file_paths:
+
+            # Replace any replacements in the config file paths.
+            resolver = Resolver(self.replacements, sgtk=self._sgtk)
+            config_file = resolver.resolve(config_file)
 
             # Check that the config file exists before loading it.
             if not os.path.exists(config_file):
@@ -180,7 +179,7 @@ class Loader(object):
             return self.config['task_attribute_defaults'][task_name]
         return {}
 
-    def parse_workflow(self, workflow_name):
+    def parse_workflow(self, workflow_name, prefix=None):
 
         task_graph = TaskGraph(
             workflow_name, 
@@ -211,6 +210,7 @@ class Loader(object):
                 continue
 
             task_data['name'] = task_name
+            task_data['name_prefix'] = prefix
             task_data['config'] = self.config
             task = task_obj.from_dict(
                 task_data, 
