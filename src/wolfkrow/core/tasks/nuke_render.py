@@ -163,7 +163,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # path to the generated nuke script.
         script_path = "{root_dir}/{task_name}.nk".format(
             root_dir=self.temp_dir,
-            task_name=self.task_name,
+            task_name=self.full_name,
         )
 
         chunk_size = self.chunk_size
@@ -502,10 +502,8 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # Save out the generated nuke script.
         script_path = "{root_dir}/{task_name}.nk".format(
             root_dir=self.temp_dir,
-            task_name=self.task_name,
+            task_name=self.full_name,
         )
-
-        resolver = Resolver(self.replacements, self.resolver_search_paths)
 
         # Now that everything is concatenated, substitute all the replacements:
         import wolfkrow.core.utils as utils        
@@ -515,7 +513,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 knob = node[knob_name]
                 knob_value = knob.value()
                 if isinstance(knob_value, basestring):
-                    new_knob_value = resolver.resolve(knob_value)
+                    new_knob_value = self.resolver.resolve(knob_value)
                     if knob_value != new_knob_value:
                         try:
                             knob.setValue(new_knob_value)

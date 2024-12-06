@@ -200,7 +200,7 @@ class TaskType(type):
         # we can access them later in the workflow designer. They need to be kept 
         # in order because the workflow designer should display the TaskAttributes 
         # in the order that they are added to the class.
-        # Note: Turns out that this is a wrong assumption. Values do not appear in __dict__ in the same order that they are added to the class. (I Think this is a python 2.7 vs 3.x difference). (OR maybe it is a "six" thing?)
+        # Note: Turns out that this is a wrong assumption. Values do not appear in __dict__ in the same order that they are added to the class. (I Think this is a python 2.7 vs 3.x difference).
         classObj.task_attributes = collections.OrderedDict()
         for cl in reversed(classObj.__mro__[:-1]):
             for name, attr in list(cl.__dict__.items()):
@@ -299,7 +299,7 @@ class Task(with_metaclass(TaskType, object)):
             self.command_line_executable_args = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE_ARGS")
 
     @property
-    def task_name(self):
+    def full_name(self):
         """ Returns the name of the task. """
         if not self.name_prefix:
             return self.name
@@ -391,13 +391,13 @@ class Task(with_metaclass(TaskType, object)):
             script_name = "{time}_{job_name}_{task_name}.{extension}".format(
                 time=now,
                 job_name=sub_space_for_underscore(job_name),
-                task_name=sub_space_for_underscore(self.name),
+                task_name=sub_space_for_underscore(self.full_name),
                 extension=extension,
             )
         else:
             script_name = "{time}_{task_name}.{extension}".format(
                 time=now,
-                task_name=sub_space_for_underscore(self.name),
+                task_name=sub_space_for_underscore(self.full_name),
                 extension=extension,
             )
 

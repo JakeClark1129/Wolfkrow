@@ -27,4 +27,6 @@ deadline:
   environment_exclusion_list:
 
 nuke_submitter:
-  temp_dir: "{project_root}/wolfkrow_temp"
+  # NOTE: $TEMP here will typically be a local drive. This will need to change to 
+  # a location accessible by your farm machines if submitting jobs to Deadline.
+  temp_dir: "$TEMP/wolfkrow_temp"
