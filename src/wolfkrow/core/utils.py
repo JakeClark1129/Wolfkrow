@@ -46,7 +46,9 @@ class WolfkrowSettings(object):
 
 
 def wolfkrow_reload(module):
-    """ Recursively reload wolfkrow modules.
+    """ Recursively reload all wolfkrow modules. Intended to be used in development, 
+    when making changes and you don't want to restart the interpreter. (Typically
+    when testing in a DCC like Nuke.)
 
     NOTE: Only recurses into submodules of the module passed in. Will not reload
         any other dependencies that the module may have.

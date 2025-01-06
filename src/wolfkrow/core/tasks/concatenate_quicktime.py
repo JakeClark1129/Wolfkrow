@@ -14,6 +14,15 @@ class ConcatenateQuicktime(Task):
     """ ConcatenateQuicktime Task implementation
     """
 
+    ffmpeg_executable = TaskAttribute(
+        default_value=None,
+        configurable=True,
+        attribute_type=str,
+        description=("The path to the ffmpeg executable. Defaults to ffmpeg and "
+            "assumes that it's added to PATH. If this is not the case, then you "
+            "must modify this attribute to point to the full ffmpeg path on your machine.")
+    )
+
     source = TaskAttribute(
         default_value=None, 
         configurable=True, 
@@ -32,13 +41,17 @@ class ConcatenateQuicktime(Task):
     def __init__(self, **kwargs):
         super(ConcatenateQuicktime, self).__init__(**kwargs)
 
+        if self.ffmpeg_executable is None:
+            self.ffmpeg_executable = os.environ.get("WOLFKROW_DEFAULT_FFMPEG_EXECUTABLE", "ffmpeg")
+
     def setup(self):
         """ Ensures that the destination directory exists, and creates the ffmpeg
         input text file which contains all the input quicktimes found.
         """
-        if not os.path.exists(self.destination):
+        destination_root = os.path.dirname(self.destination)
+        if not os.path.exists(destination_root):
             try:
-                os.makedirs(self.destination)
+                os.makedirs(destination_root)
             except OSError as e:
                 if e.errno != errno.EEXIST:
                     raise
@@ -72,7 +85,7 @@ class ConcatenateQuicktime(Task):
         success = True
 
         ffmpeg_command = [
-            "ffmpeg",
+            self.ffmpeg_executable,
             "-f", "concat",
             "-safe", "0",
             "-i", self.ffmpeg_input_file_path,

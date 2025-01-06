@@ -1,6 +1,7 @@
 from builtins import object
 import copy
 import os
+import platform
 import re
 import string
 import yaml
@@ -103,6 +104,13 @@ class Loader(object):
             else:
                 current_dict["executables"].update(executables)
 
+        path_swap = new_dict.get("path_swap")
+        if path_swap:
+            if "path_swap" not in current_dict:
+                current_dict["path_swap"] = path_swap
+            else:
+                current_dict["path_swap"].update(path_swap)
+
     def _load_configs(self, config_file_paths):
         config = {}
         for config_file in config_file_paths:
@@ -129,6 +137,54 @@ class Loader(object):
 
         return config
 
+    def _create_task(self, task_name):
+        configured_task_data = self.config['tasks'].get(task_name)
+        if configured_task_data is None:
+            return None
+
+        default_task_data = self.get_default_task_data(configured_task_data['task_type'])
+        task_data = copy.deepcopy(default_task_data)
+        task_data.update(configured_task_data)
+
+        task_type = task_data['task_type']
+        task_obj = tasks.all_tasks.get(task_type)
+        if task_obj is None:
+            print("Warning: Task type '{task_type}' is undefined. Ignoring...".format(task_type=task_type))
+            return None
+
+        # The way path swap is configured is not really optimal for performing 
+        # the actual path swaps. Lets format this into a lookup dictionary keyed 
+        # on all different root paths possible.
+        path_swap = self.config.get("path_swap", {})
+        path_swap_lookup = {}
+        for swap in path_swap:
+            for os in path_swap[swap]:
+                # We support a list of root paths for each OS because some OS's 
+                # may have multiple root paths which point to the same location. 
+                # Ex: Windows UNC paths vs drive letters.
+                if isinstance(path_swap[swap][os], list):
+                    for path in path_swap[swap][os]:
+                        path_swap_lookup[path] = path_swap[swap]
+                else:
+                    # The resolver expects a list of OS paths, rather than a 
+                    # single string, so convert this to a list.
+                    path_swap[swap][os] = [path_swap[swap][os]]
+
+                    path_swap_lookup[path_swap[swap][os][0]] = path_swap[swap]
+
+        task_data['name'] = task_name
+        task_data['config'] = self.config
+        task = task_obj.from_dict(
+            task_data, 
+            replacements=self.replacements,
+            resolver_search_paths=self.config.get("resolver_search_paths", []),
+            path_swap_lookup=path_swap_lookup,
+            config_files=self._config_file_paths, 
+            temp_dir=self.temp_dir,
+            sgtk=self._sgtk
+        )
+        return task
+
     def tasks_from_task_names_list(self, task_names):
         """ Parses list of task names, to find in the configuration files. Then 
             constructs the corresponding list of tasks.
@@ -141,35 +197,13 @@ class Loader(object):
             Returns:
                 List: List of constructed tasks.
         """
-
-        tasks_lookup = self.config['tasks']
-
         tasks_list = []
         for task_name in task_names:
 
-            configured_task_data = tasks_lookup.get(task_name)
-            if configured_task_data is None:
+            task = self._create_task(task_name)
+            if task is None:
                 continue
 
-            default_task_data = self.get_default_task_data(configured_task_data['task_type'])
-            task_data = copy.deepcopy(default_task_data)
-            task_data.update(configured_task_data)
-
-            task_type = task_data['task_type']
-            task_obj = tasks.all_tasks.get(task_type)
-            if task_obj is None:
-                print("Warning: Task type '{task_type}' is undefined. Ignoring...".format(task_type=task_type))
-
-            task_data['name'] = task_name
-            task_data['config'] = self.config
-            task = task_obj.from_dict(
-                task_data, 
-                replacements=self.replacements,
-                resolver_search_paths=self.config.get("resolver_search_paths", []),
-                config_files=self._config_file_paths, 
-                temp_dir=self.temp_dir,
-                sgtk=self._sgtk
-            )
             tasks_list.append(task)
 
         return tasks_list
@@ -192,34 +226,10 @@ class Loader(object):
             raise Exception("Unable to find workflow '{}'".format(workflow_name))
 
         for task_name in workflow_tasks:
-
-            # Get default task data dictionary
-            configured_task_data = self.config['tasks'].get(task_name)
-            if not configured_task_data:
-                print("Warning: Task '{task_name}' is undefined. Ignoring...".format(task_name=task_name))
+            task = self._create_task(task_name)
+            if task is None:
                 continue
 
-            default_task_data = self.get_default_task_data(configured_task_data['task_type'])
-            task_data = copy.deepcopy(default_task_data)
-            task_data.update(configured_task_data)
-
-            task_type = configured_task_data['task_type']
-            task_obj = tasks.all_tasks.get(task_type)
-            if task_obj is None:
-                print("Warning: Task type '{task_type}' is undefined. Ignoring...".format(task_type=task_type))
-                continue
-
-            task_data['name'] = task_name
-            task_data['name_prefix'] = prefix
-            task_data['config'] = self.config
-            task = task_obj.from_dict(
-                task_data, 
-                replacements=self.replacements, 
-                resolver_search_paths=self.config.get("resolver_search_paths", []),
-                config_files=self._config_file_paths, 
-                temp_dir=self.temp_dir,
-                sgtk=self._sgtk
-            )
             task_graph.add_task(task)
 
         return task_graph

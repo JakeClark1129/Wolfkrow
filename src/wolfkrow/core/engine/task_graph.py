@@ -267,6 +267,9 @@ class TaskGraph(object):
                 Dict: Dictionary containing Group, Limits, and Pool. Intended for 
                     use when submitting a Task to Deadline.
         """
+        # FIXME: there is no "resolver" key in the settings file. This lives in 
+        #   the wolfkrow.yaml file, so we should be getting this value from there. 
+        #   And while were at it, make sure to also grab the new swap paths value.
         # Get the search paths settings for the resolver prefix logic.
         resolver_search_paths = self._settings.get("resolver", {}).get("search_paths", [])
 
@@ -405,7 +408,8 @@ class TaskGraph(object):
                     filtered_environment_keys.extend(inclusion_list)
 
                 # Now finally build the environment:
-                environment_dict = { key: os.environ[key] for key in filtered_environment_keys if key not in excluded }
+                environment_dict = { key: os.environ[key] for key in filtered_environment_keys if key not in excluded and key in os.environ }
+
 
             environment_dict.update(environment)
 

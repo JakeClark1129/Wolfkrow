@@ -171,10 +171,14 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             chunk_size = self.render_end_frame - self.render_start_frame + 1
 
         # Create NukeRenderRun task.
+        # TODO: We should just iterate over all the TaskAttributes and find the ones
+        #   that they have in common and pass them through.
         nuke_render_run = NukeRenderRun(
             name=self.name + "_render",
             name_prefix=self.name_prefix,
             replacements=self.replacements,
+            resolver_search_paths=self.resolver_search_paths,
+            path_swap_lookup=self.path_swap_lookup,
             script=script_path, 
             write_node=self.write_node_name,
             start_frame=self.render_start_frame, 

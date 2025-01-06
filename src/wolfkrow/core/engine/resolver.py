@@ -6,6 +6,7 @@ from past.builtins import basestring
 import copy
 import datetime
 import os
+import platform
 import re
 import string
 
@@ -95,7 +96,7 @@ class Resolver(object):
     # We want to store the current time once, so that all date tokens are using the exact same time
     TIME = datetime.datetime.now()
 
-    def __init__(self, replacements, search_paths=None, sgtk=None, resolver_token=RESOLVER_TOKEN):
+    def __init__(self, replacements, search_paths=None, path_swap_lookup=None, sgtk=None, resolver_token=RESOLVER_TOKEN):
         """_summary_
 
         Args:
@@ -103,9 +104,12 @@ class Resolver(object):
 
         Kwargs:
             search_paths (list): List of paths to use in place of the RESOLVER_TOKEN.
+            path_swap_lookup (dict): Lookup dictionary for swapping paths between 
+                different operating systems. Allows for different operating 
+                systems to be used from submission to execution of a task.
             sgtk: Optional Shotgun toolkit instance to allow the use of templates.
         """
-        self.search_paths = search_paths or []
+        self.path_swap_lookup = path_swap_lookup or {}
         self.sgtk = sgtk
         self.resolver_token = resolver_token
 
@@ -116,6 +120,16 @@ class Resolver(object):
         if not replacements:
             self._replacements = {}
 
+        # We need to perform the os path swap before resolving the replacements 
+        # because otherwise the prefix resolve will always fail because they won't
+        # be searching for the correct paths.
+        self.search_paths = [] 
+        for search_path in search_paths or []:
+            self.search_paths.append(self._os_path_swap(search_path))
+
+        # TODO: We get lots of resolvers defined, and so we need to resolve all the
+        #   same replacements many times... We should try to optimize this because 
+        #   wolfkrow is noticeably slower than it should be.
         self.resolved_replacements = self.resolve_replacements(self._replacements)
 
     def refresh_replacements(self, replacements=None):
@@ -151,12 +165,14 @@ class Resolver(object):
 
         # For each replacement, we iterate through all other replacements and resolve it.
         for replacement in replacements:
-            singe_replacement = {replacement: replacements[replacement]}
+            # Get the current replacement
+            single_replacement = {replacement: replacements[replacement]}
 
+            # Now iterate through all the other replacements and resolve it.
             for replacement_b in replacements:
                 replacements[replacement_b] = self.resolve(
                     replacements[replacement_b], 
-                    replacements=singe_replacement
+                    replacements=single_replacement
                 )
 
         return replacements
@@ -175,7 +191,7 @@ class Resolver(object):
             value (str, dict or list): An instance to do replacements for.
             replacements (dict): The replacements to use for replacing instead of the replacements assigned on this object.
         """
-        replaced_value = copy.deepcopy(value)
+        replaced_value = copy.copy(value)
 
         if isinstance(value, dict):
             for key, dict_value in list(value.items()):
@@ -188,6 +204,7 @@ class Resolver(object):
         elif isinstance(value, basestring):
             replaced_value = self._replace_replacements(value, replacements=replacements)
             replaced_value = self._resolve_prefix(replaced_value, replacements=replacements)
+            replaced_value = self._os_path_swap(replaced_value)
 
         return replaced_value
 
@@ -297,7 +314,7 @@ class Resolver(object):
         value = os.path.expandvars(value)
 
         return value
-        
+
     def _get_sgtk_template_value(self, template_name, replacements=None):
         """ Will attempt to find the given template name in the sgtk instace, and 
             then use the replacements dict as the fields to get the substituted
@@ -329,4 +346,41 @@ class Resolver(object):
                 corrected_fields[field] = template.keys[field].value_from_str(str(replacements[field]))
 
         value = template.apply_fields(corrected_fields)
+        return value
+
+    def _os_path_swap(self, value):
+        """ Perform path swapping based on the swap_paths dict. 
+
+        This is helpful for running wolfkrow on different operating systems. There
+        will occasionally be cases where you run wolfkrow on one operating system,
+        but then execute the tasks on another operating system.
+
+        The swap_paths dict allows you to specify paths for multiple operating
+        systems and automatically swap between them based on he current operating
+        system.
+
+        NOTE: This just performs a blind string substitution. Meaning if any 
+            swap paths accidentally appear in a string, they will be swapped 
+            regardless of whether or not they are paths.
+
+        Args:
+            value (str): The value to swap the paths in.
+        """
+
+        if not self.path_swap_lookup:
+            return value
+
+        system = platform.system().lower()
+        for swap_path in self.path_swap_lookup:
+            # We use the first path in the list of paths for the current OS.
+            # This is important so that the user can configure a consistent 
+            # default which paths get mapped to.
+            current_os_path_options = self.path_swap_lookup[swap_path][system]
+
+            # Only perform the swap if the root path is not already a valid path 
+            # for this OS
+            if swap_path not in current_os_path_options and swap_path in value:
+                default_os_path = current_os_path_options[0]
+                value = value.replace(swap_path, default_os_path)
+
         return value

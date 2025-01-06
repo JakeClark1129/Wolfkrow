@@ -29,7 +29,7 @@ class TaskAttribute(object):
     """
 
     def __init__(self, default_value=None, configurable=False, attribute_options=None, 
-        attribute_type=None, required=False, serialize=True, description=None):
+        attribute_type=None, required=False, auto_resolve=True, serialize=True, description=None):
         """ Initialize the TaskAttribute object.
         
             Kwargs:
@@ -65,8 +65,9 @@ class TaskAttribute(object):
         self.serialize = serialize
         self.description = description
         self.required = required
+        self.auto_resolve = auto_resolve
 
-    def __get__(self, instance, instance_type=None, resolve=True):
+    def __get__(self, instance, instance_type=None, dont_resolve=False):
         """ Getter function. Will return the stored value for the specified instance
             if it exists, otherwise it will return the default_value
         """
@@ -90,7 +91,11 @@ class TaskAttribute(object):
             #     1. Have data to resolve
             #     2. Are told to resolve
             #     3. Have a resolver to resolve with
-            if data and resolve is True and hasattr(instance, "resolver"):
+            if (data 
+                and self.auto_resolve is True 
+                and dont_resolve is False 
+                and hasattr(instance, "resolver")
+            ):
                 data = self.resolve(instance, data)
 
             return data
@@ -245,6 +250,7 @@ class Task(with_metaclass(TaskType, object)):
         description="""Comma separated list of dependency ID's that are not part of the task graph. These are the ID's of existing tasks which must be completed before this task can start. Currently only relevant for Deadline submission.""")
     replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
     resolver_search_paths = TaskAttribute(default_value=[], configurable=False, attribute_type=list)
+    path_swap_lookup = TaskAttribute(default_value={}, configurable=False, auto_resolve=False, attribute_type=dict)
     config_files = TaskAttribute(
         default_value=[],
         configurable=False,
@@ -284,7 +290,12 @@ class Task(with_metaclass(TaskType, object)):
         # Build the resolver for future use. Every task should get it's own, and
         # each tasks resolver is responsible for resolving any replacements used
         # within the task.
-        self.resolver = Resolver(self.replacements, self.resolver_search_paths, sgtk=self.sgtk)
+        self.resolver = Resolver(
+            self.replacements, 
+            self.resolver_search_paths, 
+            self.path_swap_lookup, 
+            sgtk=self.sgtk
+        )
 
         if self.python_script_executable is None:
             self.python_script_executable = os.environ.get("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE")
@@ -296,7 +307,8 @@ class Task(with_metaclass(TaskType, object)):
             self.command_line_executable = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE")
         
         if self.command_line_executable_args is None:
-            self.command_line_executable_args = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE_ARGS")
+            items = os.environ.get("WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE_ARGS", "").split(",")
+            self.command_line_executable_args = items
 
     @property
     def full_name(self):
@@ -310,7 +322,7 @@ class Task(with_metaclass(TaskType, object)):
         # We need to get the dependencies without resolving them. This is because 
         # the resolver only returns a copy of the resolved value, so when we update
         # the dependency next, we will only be updating the copy.
-        dependencies = Task.dependencies.__get__(self, resolve=False)
+        dependencies = Task.dependencies.__get__(self, dont_resolve=True)
 
         dependencies.append(task_name)
 
@@ -747,7 +759,7 @@ sys.exit(ret)""".format(
         # We need to get the replacements without resolving them. This is because 
         # the resolver only returns a copy of the resolved value, so when we update
         # the replacements next, we will only be updating the copy.
-        replacements = Task.replacements.__get__(self, resolve=False)
+        replacements = Task.replacements.__get__(self, dont_resolve=True)
 
         replacements.update(new_replacements)
 
@@ -779,6 +791,7 @@ sys.exit(ret)""".format(
         data_dict, 
         replacements=None, 
         resolver_search_paths=None, 
+        path_swap_lookup=None,
         config_files=None, 
         sgtk=None, 
         temp_dir=None
@@ -820,6 +833,9 @@ sys.exit(ret)""".format(
 
         if "resolver_search_paths" not in filtered_data_dict:
             filtered_data_dict["resolver_search_paths"] = resolver_search_paths
+
+        if "path_swap_lookup" not in filtered_data_dict:
+            filtered_data_dict["path_swap_lookup"] = path_swap_lookup
 
         if temp_dir and "temp_dir" not in filtered_data_dict:
             filtered_data_dict["temp_dir"] = temp_dir
