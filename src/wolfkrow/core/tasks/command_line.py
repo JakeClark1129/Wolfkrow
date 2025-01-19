@@ -5,10 +5,13 @@ import errno
 import os
 import shutil
 
+from wolfkrow.core.engine.task_export import TaskExport
 from wolfkrow.core.tasks.task import Task, TaskAttribute
 from wolfkrow.core.tasks.file_operation import FileOperation
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 from wolfkrow.core.tasks.sequence_task import SequenceTask
+from wolfkrow.core.engine.resolver import Resolver
+
 
 class CommandLine(SequenceTask):
     """ Allows execution of arbitrary command line scripts.
@@ -42,30 +45,43 @@ class CommandLine(SequenceTask):
     args = TaskAttribute(required=True, attribute_type=list, description="The arguments to the command. Must be supplied as a list.")
 
     def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
-        """ Overwrites the default behavior of this this method to just recreate 
+        """ Overwrites the default behavior of this method to just recreate 
             the command line script to run from the script and args attributes.
 
             We don't need Wolfkrow to act as a middle man here...
         """
 
-        arg_str = " ".join(self.args)
-
-        command = "{script} {script_args}".format(
-            script=self.script, 
-            script_args=arg_str
-        )
+        args = self.args.copy() # Dont change the original args list.
 
         if self.start_frame and self.end_frame:
+            
             start_frame = self._command_line_sanitize_attribute("start_frame", self.start_frame, deadline=deadline)
             end_frame = self._command_line_sanitize_attribute("end_frame", self.end_frame, deadline=deadline)
-            try:
-                command = command.format(start_frame=start_frame, end_frame=end_frame)
-            except IndexError as e:
-                pass
-            except KeyError as e:
-                pass
+            
+            replacements = {
+                "start_frame": start_frame,
+                "end_frame": end_frame,
+            }
+            resolver = Resolver(replacements, None)
+            
+            for index, arg in enumerate(self.args):
+                try:
+                    arg = resolver.resolve(arg)
+                except IndexError as e:
+                    pass
+                except KeyError as e:
+                    pass
+                finally:
+                    args[index] = arg
 
-        return [(self, command)]
+        task_export = TaskExport(
+            self,
+            executable=self.script, 
+            executable_args=args,
+            args="",
+        )
+
+        return [task_export]
 
     # TODO: We need to implement the run method, otherwise the PythonScript export 
     # type won't work for this task type. It should be a subprocess call.

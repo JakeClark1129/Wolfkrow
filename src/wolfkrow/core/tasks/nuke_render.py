@@ -15,7 +15,7 @@ from .task_exceptions import TaskValidationException
 from wolfkrow.core.engine.resolver import Resolver
 
 class NukeTask(Task):
-    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in 
             order to re-construct and run this task via command line. 
 
@@ -28,14 +28,35 @@ class NukeTask(Task):
             deadline=deadline,
         )
 
-        updated_exported = []
         # Append a "$" to the end of the command so that nuke does not consume 
         # the last argument as a frame number/range.
         for export in exported:
-            obj, command = export
-            command = "{} $".format(command)
-            updated_exported.append((obj, command))
-        return updated_exported
+            args = "{} $".format(export.task_args)
+            export.task_args = args
+        return exported
+
+    def _command_line_sanitize_attribute(
+        self, attribute_name, attribute_value, deadline=False
+    ):
+        """
+        Processes the attribute value to prepare it for use on the command line.
+
+        Default implementation just returns the given value.
+        """
+        # When setting a knob value in Nuke, it resolves the double backslashes 
+        # to single backslashes, which then causes errors because it still treat's 
+        # single slashes as an escape character. So we need to double up, so that 
+        # the double backslashes are actually double backslashes once they are set 
+        # on the knobs in Nuke.
+        if isinstance(attribute_value, basestring) and "\\" in attribute_value:
+            attribute_value = attribute_value.replace("\\", "\\\\")
+
+        # Continue processing the attribute value.
+        attribute_value = super(NukeTask, self)._command_line_sanitize_attribute(
+            attribute_name, attribute_value, deadline=deadline
+        )
+
+        return attribute_value
 
 class NukeRender(NukeTask):
 
@@ -57,24 +78,8 @@ class NukeRender(NukeTask):
     destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
     file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
     bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
-    codec = TaskAttribute(default_value=8, configurable=True, attribute_options=list(range(0, 13)), attribute_type=int, 
-        description="""
-    Which Codec to render the quicktime with.
-        0 - Apple ProRes 4444 XQ
-        1 - Apple ProRes 4444
-        2 - Apple ProRes 422 HQ
-        3 - Apple ProRes 422
-        4 - Apple ProRes 422 LT
-        5 - Apple ProRes 422 Proxy
-        6 - Avid DNxHD codec
-        7 - N/A
-        8 - Photo - JPEG
-        9 - MPEG-1 Video
-        10 - MPEG-4 Video
-        11 - PNG
-        12 - Animation
-        13 - Uncompressed 10-bit 4:2:2
-    """)
+    codec = TaskAttribute(default_value=8, configurable=True, attribute_type=str, 
+        description="""Which Codec to render the quicktime with.""")
     compression = TaskAttribute(default_value=None, attribute_type=int, description="""Which Compression to use when writing the file. This value is only used when 
 writing exr, sgi, targa, or tiff files. Each file type has its own options. See below:
     EXR:
@@ -158,7 +163,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # path to the generated nuke script.
         script_path = "{root_dir}/{task_name}.nk".format(
             root_dir=self.temp_dir,
-            task_name=self.name,
+            task_name=self.full_name,
         )
 
         chunk_size = self.chunk_size
@@ -166,8 +171,14 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             chunk_size = self.render_end_frame - self.render_start_frame + 1
 
         # Create NukeRenderRun task.
+        # TODO: We should just iterate over all the TaskAttributes and find the ones
+        #   that they have in common and pass them through.
         nuke_render_run = NukeRenderRun(
             name=self.name + "_render",
+            name_prefix=self.name_prefix,
+            replacements=self.replacements,
+            resolver_search_paths=self.resolver_search_paths,
+            path_swap_lookup=self.path_swap_lookup,
             script=script_path, 
             write_node=self.write_node_name,
             start_frame=self.render_start_frame, 
@@ -175,7 +186,9 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             increment=self.render_increment,
             chunk_size=chunk_size,
             command_line_executable=self.command_line_executable,
+            command_line_executable_args=self.command_line_executable_args,
             python_script_executable=self.python_script_executable,
+            python_script_executable_args=self.python_script_executable_args,
         )
 
         return [nuke_render_run]
@@ -447,7 +460,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
         # If the destination is just a directory, calculate the output filename 
         # from the input name.
-        if self.destination.endswith(os.sep):
+        if self.destination.endswith(os.sep) or self.destination.endswith("/"):
             source_basename = os.path.basename(self.source)
             base, ext = os.path.splitext(source_basename)
             dest_basename = "{}.{}".format(base, self.file_type)
@@ -493,10 +506,8 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # Save out the generated nuke script.
         script_path = "{root_dir}/{task_name}.nk".format(
             root_dir=self.temp_dir,
-            task_name=self.name,
+            task_name=self.full_name,
         )
-
-        resolver = Resolver(self.replacements, self.resolver_search_paths)
 
         # Now that everything is concatenated, substitute all the replacements:
         import wolfkrow.core.utils as utils        
@@ -506,7 +517,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 knob = node[knob_name]
                 knob_value = knob.value()
                 if isinstance(knob_value, basestring):
-                    new_knob_value = resolver.resolve(knob_value)
+                    new_knob_value = self.resolver.resolve(knob_value)
                     if knob_value != new_knob_value:
                         try:
                             knob.setValue(new_knob_value)
@@ -523,7 +534,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                         expression = animation.expression()
                         expression = re.sub("\\\\{", "{", expression)
                         expression = re.sub("\\\\}", "}", expression)
-                        new_expression = resolver.resolve(expression)
+                        new_expression = self.resolver.resolve(expression)
                         if expression != new_expression:
                             try:
                                 knob.setExpression(new_expression, index)
@@ -540,6 +551,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 if error.errno != errno.EEXIST:
                     raise
 
+        print("Saved Nuke script to: \n\n{}\n\n".format(script_path))
         nuke.scriptSaveAs(script_path, overwrite=1)
         return 0
 
@@ -601,6 +613,8 @@ class NukeRenderRun(NukeTask, SequenceTask):
         """
         # Import nuke here because the main engine which creates the tasks will not be run in a nuke process.
         import nuke
+
+        print("Rendering nuke script: \n\n{}\n\n".format(self.script))
 
         # Open the nuke script.
         nuke.scriptOpen(self.script)
