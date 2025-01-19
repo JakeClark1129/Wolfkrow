@@ -534,7 +534,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                         expression = animation.expression()
                         expression = re.sub("\\\\{", "{", expression)
                         expression = re.sub("\\\\}", "}", expression)
-                        new_expression = resolver.resolve(expression)
+                        new_expression = self.resolver.resolve(expression)
                         if expression != new_expression:
                             try:
                                 knob.setExpression(new_expression, index)

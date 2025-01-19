@@ -647,7 +647,7 @@ class ContextManager():
         if sequence:
             return self.context_from_entity(sequence)
 
-        # If we can't fnind the etity in the sequences, try and find it in the shots
+        # If we can't find the entity in the sequences, try and find it in the shots
         shot = self.get_entity("Shot", entity_name)
         if shot:
             shot_context = self.context_from_entity(shot)
