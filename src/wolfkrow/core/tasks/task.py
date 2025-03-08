@@ -260,6 +260,10 @@ class Task(with_metaclass(TaskType, object)):
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
 
+    chunkable = TaskAttribute(default_value=False, configurable=False, attribute_type=bool, serialize=False,
+        description="whether or not this task is able to be run in Chunks. (Only relevant for Deadline submission.)"
+    )
+
     python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)

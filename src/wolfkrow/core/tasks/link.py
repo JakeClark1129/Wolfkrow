@@ -26,6 +26,14 @@ class Link(FileOperation):
     source_permission = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
     destination_permission = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
 
+
+    def __init__(self, **kwargs):
+        """ Override the chunkable attribute to False for hard links.
+        """
+        super(FileOperation, self).__init__(**kwargs)
+        # Hard links are so quick that doing them in chunks makes them take longer.
+        self.chunkable = False
+
     def validate(self):
         """ Preforms Validation checks for the Link Task. Will check to make sure 
             that the source file is not a directory for hardlinking.

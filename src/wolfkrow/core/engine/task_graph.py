@@ -365,14 +365,17 @@ class TaskGraph(object):
             job_attrs.update(additional_job_attrs)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
-            if (hasattr(task.task, "start_frame") and task.task.start_frame is not None and
-                hasattr(task.task, "end_frame") and task.task.end_frame is not None and
-                hasattr(task.task, "chunk_size") and task.task.chunk_size is not None
+            if (hasattr(task.task, "chunkable") and task.task.chunkable is True and
+                hasattr(task.task, "start_frame") and task.task.start_frame is not None and
+                hasattr(task.task, "end_frame") and task.task.end_frame is not None
             ):
                 job_attrs['Frames'] = "{}-{}".format(task.task.start_frame, task.task.end_frame)
-                job_attrs['ChunkSize'] = task.task.chunk_size  
+                chunk_size = getattr(task.task, "chunk_size", 32) # Default to 32 if no chunk size is set.
+
+                job_attrs['ChunkSize'] = chunk_size
+
                 # Override chunk size to the total frame count if it is 0 or None
-                if task.task.chunk_size and task.task.chunk_size == 0:
+                if chunk_size is None or chunk_size == 0:
                     job_attrs['ChunkSize'] = task.task.end_frame - task.task.start_frame + 1
 
             environment_dict = {}
