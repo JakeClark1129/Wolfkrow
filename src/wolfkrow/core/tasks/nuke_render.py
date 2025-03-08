@@ -7,6 +7,7 @@ from past.builtins import basestring
 import errno
 import logging
 import os
+import re
 
 from .task import Task, TaskAttribute
 from .sequence_task import SequenceTask
@@ -108,13 +109,24 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         3 - Deflate
     """)
 
-    # Input frame range
-    input_start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-    input_end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    # Frame range to use for reading and writing.
+    start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int, 
+        description="The start frame to use for the read node and render range.")
+    end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int,
+        description="The end frame to use for the read node and render range.")
 
-    # Render frame range, and frame increment
-    render_start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
-    render_end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int)
+    # Frame range overrides for the input
+    input_start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int, 
+        description="The start frame set on the read node. Overrides the start_frame for Read node only.")
+    input_end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int,
+        description="The end frame set on the read node. Overrides the end_frame for Read node only.")
+
+    # Frame range overrides for the output
+    render_start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int, 
+        description="The start frame to render from. Passed to the execute method when rendering. Overrides the start_frame for render range only.")
+    render_end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int,
+        description="The end frame to render to. Passed to the execute method when rendering. Overrides the end_frame for render range only.")
+    
     render_increment = TaskAttribute(
         default_value=1, 
         configurable=True, 
@@ -122,7 +134,16 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         description="The increments to use when rendering. Ex: 10 will render every 10th frame."
     )
     chunk_size = TaskAttribute(default_value=8, configurable=True, attribute_type=int, 
-    description="Number of frames to split each task into for running on multiple machines. 0 to perform no chunking")
+        description="Number of frames to split each task into for running on multiple machines. 0 to perform no chunking"
+    )
+
+    renumber = TaskAttribute(
+        default_value=None, 
+        configurable=True, 
+        attribute_type=int,
+        description="Add's a timeoffset node to the nuke script which will renumber the input_start_frame to the renumber specified."
+    )
+    
     generate_quicktimes_in_chunks = TaskAttribute(
         default_value=False, 
         configurable=True, 
@@ -132,19 +153,27 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             "together after a distributed render on the farm."
     )
     additional_read_node_properties = TaskAttribute(
-        default_value=None, 
+        default_value={}, 
         configurable=True, 
         attribute_type=dict, 
         description="Dictionary containing key value pairs as 'knob_name': 'knob_value'"
     )
     additional_write_node_properties = TaskAttribute(
-        default_value=None, 
+        default_value={}, 
         configurable=True, 
         attribute_type=dict, 
         description="Dictionary containing key value pairs as 'knob_name': 'knob_value'"
     )
-    root_node_properties = TaskAttribute(
+
+    font_path = TaskAttribute(
         default_value=None, 
+        configurable=True, 
+        attribute_type=str, 
+        description="Root folder to font files to include in the nuke script."
+    )
+
+    root_node_properties = TaskAttribute(
+        default_value={}, 
         configurable=True, 
         attribute_type=dict, 
         description="Dictionary containing key value pairs as 'knob_name': 'knob_value' "
@@ -199,6 +228,40 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             Raises:
                 TaskValidationException: NukeRenderRun task is not properly initialized
         """
+        # Set up the default frame number values. 
+        input_start_frame = self.start_frame
+        render_start_frame = self.start_frame
+
+        input_end_frame = self.end_frame
+        render_end_frame = self.end_frame
+
+        # Apply the frame number overrides
+        if self.input_start_frame is not None:
+            input_start_frame = self.input_start_frame
+
+        if self.input_end_frame is not None:
+            input_end_frame = self.input_end_frame
+
+        if self.render_start_frame is not None:
+            render_start_frame = self.render_start_frame
+
+        if self.render_end_frame is not None:
+            render_end_frame = self.render_end_frame
+
+        # validate that the frame range is valid.
+        if input_start_frame is None or input_end_frame is None:
+            raise TaskValidationException("Input frame range must be set.")
+        
+        if render_start_frame is None or render_end_frame is None:
+            raise TaskValidationException("Render frame range must be set.")
+
+        # And finally set the values back on the task.
+        self.input_start_frame = input_start_frame
+        self.input_end_frame = input_end_frame
+
+        self.render_start_frame = render_start_frame
+        self.render_end_frame = render_end_frame
+
         super(NukeRender, self).validate()
 
     def setup(self):
@@ -379,9 +442,9 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
         return bottom_node
 
-    def _concatenate_nuke_scripts(self):
+    def _concatenate_nuke_scripts(self, scripts):
         current_bottom_node = None
-        for script in self.scripts:
+        for script in scripts:
             if isinstance(script, dict):
                 self._append_nuke_node(script, current_bottom_node)
             else:
@@ -408,13 +471,14 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 failed = False
                 try:
                     knob = node.knob(key)
-                    # Get the knob's data type, and attempt to cast value to that type.
-                    knob_value_type = type(knob.getValue())
-                    if knob_value_type != type(None):
-                        try:
-                            value = knob_value_type(value)
-                        except:
-                            pass
+                    if not isinstance(value, int):
+                        # Get the knob's data type, and attempt to cast value to that type.
+                        knob_value_type = type(knob.getValue())
+                        if knob_value_type != type(None):
+                            try:
+                                value = knob_value_type(value)
+                            except:
+                                pass
                     knob.setValue(value)
                 except Exception as e:
                     print("Failed to set knob '{}' to {!r}".format(key, value))
@@ -424,7 +488,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         import nuke
 
         # Concatenate all the nuke scripts in the self.scripts list into a single nuke script.
-        bottom_node = self._concatenate_nuke_scripts()
+        bottom_node = self._concatenate_nuke_scripts(self.scripts)
 
         top_node = None
         # bottom_node will be None when there is no 'scripts' in self.scripts (or 
@@ -436,6 +500,8 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # Create Read node for self.source
         read_node = nuke.createNode("Read")
         read_node.knob("raw").setValue(True)
+        print(f"wolfkrow_read: {self.source} {self.input_start_frame}-{self.input_end_frame}")
+        read_node.knob("name").setValue("wolfkrow_read")
         read_node.knob("file").setValue(self.source)
         read_node.knob("first").setValue(self.input_start_frame)
         read_node.knob("last").setValue(self.input_end_frame)
@@ -444,10 +510,10 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             self.set_node_knob_values_from_dict(read_node, self.additional_read_node_properties)
 
         time_offset = None
-        if self.input_start_frame != self.render_start_frame:
+        if self.renumber:
             time_offset = nuke.createNode("TimeOffset")
             time_offset.setSelected(False)
-            time_offset.knob("time_offset").setValue(self.render_start_frame - self.input_start_frame)
+            time_offset.knob("time_offset").setValue(self.renumber - self.input_start_frame)
             time_offset.setInput(0, read_node)
 
         if top_node:
@@ -489,12 +555,19 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             if self.compression:
                 write_node.knob("compression").setValue(self.compression)
 
+        root_node = nuke.toNode("root")
+
+        if self.font_path:
+            root_node.knob("free_type_font_path").setValue(self.font_path)
+
         # Set values for arbitrary knobs and values.
         if self.additional_write_node_properties:
             self.set_node_knob_values_from_dict(write_node, self.additional_write_node_properties)
 
+        if self.additional_write_node_properties:
+            self.set_node_knob_values_from_dict(write_node, self.additional_write_node_properties)
+
         if self.root_node_properties:
-            root_node = nuke.toNode("root")
             self.set_node_knob_values_from_dict(root_node, self.root_node_properties)
 
         # If there is no bottom node, set the read node as the bottom_node
@@ -530,7 +603,6 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 if knob.hasExpression(index):
                     animations = knob.animations()
                     for index, animation in enumerate(animations):
-                        import re
                         expression = animation.expression()
                         expression = re.sub("\\\\{", "{", expression)
                         expression = re.sub("\\\\}", "}", expression)
@@ -551,8 +623,65 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 if error.errno != errno.EEXIST:
                     raise
 
+        # Get all the correct knob values for the write node. (This is used later - See NOTE below)
+        correct_knob_values = {}
+        for knob in self.additional_write_node_properties:
+            if knob in write_node.knobs():
+                value = write_node.knob(knob).value()
+                correct_knob_values[knob] = value
+
         print("Saved Nuke script to: \n\n{}\n\n".format(script_path))
         nuke.scriptSaveAs(script_path, overwrite=1)
+
+        # NOTE: Nuke on Windows has a nasty bug where it changes some of the knob 
+        # settings on the write node when saving the script. This error only occurs 
+        # when running nuke in terminal mode, and currently seems to only affect 
+        # the codec profile knobs (More testing is required for specific knobs 
+        # effected).
+        # To get around this, we are going to open the nuke script after saving 
+        # as a text file, then use some regex magic to find the Write node and 
+        # confirm it's correct - If not, we will print a warning (To assist with 
+        # understanding how it's wrong for the Foundry bug report), and then 
+        # correct the value to what it should be.
+        # This bug seems to only manifest when the following conditions are met:
+        #   - Nuke is run in terminal mode.
+        #   - Specific knobs are set on the Write node. (mov_prores_codec_profile as example)
+        #   - The write node was created in terminal mode. (A pre-existing write 
+        #       node in an opened nuke script lets you set the knob correctly)
+
+        print ("Validating the nuke script is correct...")
+        with open(script_path, "r") as script_file:
+            script_text = script_file.read()
+        
+        # Find the Write node in the script.
+        write_node_regex = r"Write \{(?:.|\n)*?\n[ ]*\}"
+
+        write_node_text_matches = re.findall(write_node_regex, script_text)
+        for write_node_text_match in write_node_text_matches:
+            write_node_text = write_node_text_match
+
+            # We only want to modify the wolfkrow write node. We should leave 
+            # other write nodes intact.
+            if self.write_node_name not in write_node_text:
+                continue
+
+            for knob in correct_knob_values:
+                correct_knob_value = correct_knob_values[knob]
+                knob_regex = f"{knob} [\"']?(.*)[\"']"
+                knob_text_match = re.search(knob_regex, write_node_text)
+                if knob_text_match:
+                    knob_value = knob_text_match.group(1)
+                    if knob_value != correct_knob_value:
+                        print("Warning: Knob '{}' on Write node is incorrect. Expected: '{}', Found: '{}'".format(knob, correct_knob_value, knob_value))
+                        print("Correcting...")
+                        write_node_text = re.sub(knob_regex, f"{knob} \"{correct_knob_value}\"", write_node_text)
+
+        # Now sub the corrected write node into the script.
+        script_text = re.sub(write_node_regex, write_node_text, script_text)
+
+        with open(script_path, "w") as script_file:
+            script_file.write(script_text)
+
         return 0
 
 
@@ -619,6 +748,7 @@ class NukeRenderRun(NukeTask, SequenceTask):
         # Open the nuke script.
         nuke.scriptOpen(self.script)
 
+        print(f"Executing: {self.write_node}: {self.start_frame}-{self.end_frame}:{self.increment}")
         # Execute the write node to kick off the render.
         nuke.execute(self.write_node, self.start_frame, self.end_frame, self.increment)
         return 0

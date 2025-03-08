@@ -18,7 +18,7 @@ deadline:
 
   environment_inclusion_filters:
     - TK_* # Toolkit environment variables
-    - *OCIO* # Include everything relating to ocio
+    - "*OCIO*" # Include everything relating to ocio
     - WOLFKROW* # Wolfkrow environment variables
   environment_exclusion_filters:
   environment_inclusion_list:

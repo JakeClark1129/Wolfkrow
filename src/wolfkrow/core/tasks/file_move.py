@@ -18,5 +18,12 @@ class FileMove(FileOperation):
             a trailing slash OR ensure the directory exists ahead of time.
     """
 
+    def __init__(self, **kwargs):
+        """ Override the chunkable attribute to False for file moves.
+        """
+        super(FileOperation, self).__init__(**kwargs)
+        # File moves are so quick that doing them in chunks makes them take longer.
+        self.chunkable = False
+
     def operate(self, source, destination):
         shutil.move(source, destination)
