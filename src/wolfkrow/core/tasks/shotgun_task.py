@@ -1,10 +1,7 @@
 """ Module implementing the FileCopy task.
 """
 
-import errno
-import os
-import shutil
-import subprocess
+import re
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
@@ -165,6 +162,22 @@ class ShotgunTask(Task):
                         field_value["id"] = int(id)
                     except ValueError:
                         print("Warning: Could not convert ID to int: {}".format(id))
+
+            elif sg_schema_type == "url" and isinstance(field_value, dict):
+                field_value = field_value.copy() # Copy the dict so we don't modify the original
+
+                # SG has a bug on Windows where backslashes MUST be used for the 
+                # drive letter, or it doubles up on the drive letter.
+                # Autodesk internal Ticket number to reference to follow up on this issue:
+                #   SG-4373
+                windows_path_regex = "[a-zA-Z]:/"
+                for key in field_value:
+                    if key == "local_path" or key == "local_path_windows":
+                        if re.match(windows_path_regex, field_value[key]):
+                            print("Warning: Detected Windows Drive Letter path in field '{}'. ".format(field))
+                            print("    Converting slashes to backslashes.")
+                            print("    This is required due to a bug in Shotgun")
+                            field_value[key] = field_value[key].replace("/", "\\")
 
             processed_fields[field] = field_value
 
