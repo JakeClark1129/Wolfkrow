@@ -18,5 +18,13 @@ class FileDelete(FileOperation):
             a trailing slash OR ensure the directory exists ahead of time.
     """
 
+    def __init__(self, **kwargs):
+        """ Override the chunkable attribute to False for file deletions.
+        """
+
+        super(FileOperation, self).__init__(**kwargs)
+        # File deletions are so quick that doing them in chunks makes them take longer.
+        self.chunkable = False
+
     def operate(self, source, destination):
         shutil.rmtree(source)

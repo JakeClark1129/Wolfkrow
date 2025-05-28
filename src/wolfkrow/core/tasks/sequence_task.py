@@ -16,6 +16,8 @@ class SequenceTask(Task):
     def __init__(self, **kwargs):
         """ Initializes Task object
         """
+        # All sequence tasks are chunkable by default.
+        self.chunkable = True
         super(SequenceTask, self).__init__(**kwargs)
 
     def validate(self):
@@ -32,24 +34,23 @@ class SequenceTask(Task):
         if self.start_frame is None and self.end_frame is None:
             pass
         elif self.start_frame is None and self.end_frame is not None:
-            raise TaskValidationException("Start frame specified, but end frame "
-                "not specified. {} - {}".format(self.start_frame, self.end_frame)
+            raise TaskValidationException(
+                f"{self.full_name}: End frame specified, but Start frame not specified: {self.start_frame} - {self.end_frame}"
             )
 
         elif self.end_frame is None and self.start_frame is not None:
-            raise TaskValidationException("End frame specified, but start frame "
-                "not specified. {} - {}".format(self.start_frame, self.end_frame)
+            raise TaskValidationException(
+                f"{self.full_name}: Start frame specified, but End frame not specified: {self.start_frame} - {self.end_frame}"
             )
         else:
             if self.chunk_size < 0:
-                raise TaskValidationException("Chunk size must be a positive number")
-
+                raise TaskValidationException(
+                    f"{self.full_name}: Chunk size must be a positive number: {self.chunk_size}"
+                )
 
             if self.end_frame < self.start_frame:
-                raise TaskValidationException("Invalid Frame Range: {start_frame} - {end_frame}".format(
-                        self.end_frame, 
-                        self.start_frame
-                    )
+                raise TaskValidationException(
+                    f"{self.full_name}: Invalid Frame Range: {self.start_frame} - {self.end_frame}"
                 )
 
             if self.end_frame < 0 or self.start_frame < 0:
