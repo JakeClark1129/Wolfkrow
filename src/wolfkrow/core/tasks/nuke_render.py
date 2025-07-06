@@ -15,6 +15,57 @@ from .task_exceptions import TaskValidationException
 
 from wolfkrow.core.engine.resolver import Resolver
 
+class RenderRange():
+    """ Class to calculate the frame range for the read nodes.
+    """
+    def __init__(self, 
+        start_frame=None, 
+        end_frame=None, 
+        input_start_frame=None, 
+        input_end_frame=None, 
+        render_start_frame=None, 
+        render_end_frame=None
+    ):
+        self.start_frame = int(start_frame) if start_frame is not None else None
+        self.end_frame = int(end_frame) if end_frame is not None else None
+        self.input_start_frame = int(input_start_frame) if input_start_frame is not None else None
+        self.input_end_frame = int(input_end_frame) if input_end_frame is not None else None
+        self.render_start_frame = int(render_start_frame) if render_start_frame is not None else None
+        self.render_end_frame = int(render_end_frame) if render_end_frame is not None else None
+
+    def calculate(self):
+        """ Calculates the frame range for the read nodes.
+        """
+        # Set up the default frame number values. 
+        input_start_frame = self.start_frame
+        render_start_frame = self.start_frame
+
+        input_end_frame = self.end_frame
+        render_end_frame = self.end_frame
+
+        # Apply the frame number overrides
+        if self.input_start_frame is not None:
+            input_start_frame = self.input_start_frame
+
+        if self.input_end_frame is not None:
+            input_end_frame = self.input_end_frame
+
+        if self.render_start_frame is not None:
+            render_start_frame = self.render_start_frame
+
+        if self.render_end_frame is not None:
+            render_end_frame = self.render_end_frame
+
+        # validate that the frame range is valid.
+        if input_start_frame is None or input_end_frame is None:
+            raise TaskValidationException("Input frame range must be set.")
+        
+        if render_start_frame is None or render_end_frame is None:
+            raise TaskValidationException("Render frame range must be set.")
+
+        return (input_start_frame, input_end_frame, render_start_frame, render_end_frame)
+
+
 class NukeTask(Task):
     def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in 
@@ -67,6 +118,12 @@ class NukeRender(NukeTask):
 
     # Attributes for read node
     source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
+
+    # Attributes for read node
+    # TODO: How can we do validation on complex attributes like this?
+    #   Should we build a schema system which allows us to write custom validators
+    #   for complex attributes?
+    additional_sources = TaskAttribute(default_value=None, configurable=True, attribute_type=dict)
 
     # Attributes for write node
     write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
@@ -228,25 +285,21 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             Raises:
                 TaskValidationException: NukeRenderRun task is not properly initialized
         """
-        # Set up the default frame number values. 
-        input_start_frame = self.start_frame
-        render_start_frame = self.start_frame
 
-        input_end_frame = self.end_frame
-        render_end_frame = self.end_frame
-
-        # Apply the frame number overrides
-        if self.input_start_frame is not None:
-            input_start_frame = self.input_start_frame
-
-        if self.input_end_frame is not None:
-            input_end_frame = self.input_end_frame
-
-        if self.render_start_frame is not None:
-            render_start_frame = self.render_start_frame
-
-        if self.render_end_frame is not None:
-            render_end_frame = self.render_end_frame
+        # Calculate the render range for the main read node.
+        render_range = RenderRange(
+            start_frame=self.start_frame,
+            end_frame=self.end_frame,
+            input_start_frame=self.input_start_frame,
+            input_end_frame=self.input_end_frame,
+            render_start_frame=self.render_start_frame,
+            render_end_frame=self.render_end_frame,
+        )
+        input_start_frame, input_end_frame, render_start_frame, render_end_frame = render_range.calculate()
+        
+        # And finally set the values back on the task.
+        self.input_start_frame = input_start_frame
+        self.input_end_frame = input_end_frame
 
         # validate that the frame range is valid.
         if input_start_frame is None or input_end_frame is None:
@@ -255,14 +308,28 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         if render_start_frame is None or render_end_frame is None:
             raise TaskValidationException("Render frame range must be set.")
 
-        # And finally set the values back on the task.
-        self.input_start_frame = input_start_frame
-        self.input_end_frame = input_end_frame
-
-        self.render_start_frame = render_start_frame
-        self.render_end_frame = render_end_frame
-
         super(NukeRender, self).validate()
+
+        additional_sources = NukeRender.additional_sources.__get__(self, dont_resolve=True)
+        for source, data in additional_sources.items():
+            if "source" not in data:
+                raise TaskValidationException("Additional source '{}' does not have a 'source' key.".format(source))
+            
+            # Every source can have it's own render range, but default to the parent's range.
+            render_range = RenderRange(
+                start_frame=data.get("start_frame", self.start_frame),
+                end_frame=data.get("end_frame", self.end_frame),
+                input_start_frame=data.get("input_start_frame", self.input_start_frame),
+                input_end_frame=data.get("input_end_frame", self.input_end_frame),
+                render_start_frame=data.get("render_start_frame", self.render_start_frame),
+                render_end_frame=data.get("render_end_frame", self.render_end_frame),
+            )
+            input_start_frame, input_end_frame, render_start_frame, render_end_frame = render_range.calculate()
+            # TODO: Test that this actually modifies the data dict. (I think we might only be getting a copy of the dict)
+            data["input_start_frame"] = input_start_frame
+            data["input_end_frame"] = input_end_frame
+            data["render_start_frame"] = render_start_frame
+            data["render_end_frame"] = render_end_frame
 
     def setup(self):
         """ Will create destination directory if it does not already exist.
@@ -298,8 +365,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
     def _find_top_node(self, bottom_node):
         """ Finds the top node from the supplied nodes inputs. an acceptable top_node
-            must accept 1 input, and not have anything connected. (Write, 
-            Constant, Merge, Switch, etc... are not acceptable)
+            must not have anything connected.
 
             Will traverse up the node tree using depth-first traversal, and returns 
             the first acceptable node found.
@@ -313,7 +379,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         """
 
         inputs = bottom_node.inputs()
-        if inputs == 0 and bottom_node.maximumInputs() == 1:
+        if inputs == 0:
             return bottom_node
 
         for i in range(0, inputs):
@@ -457,6 +523,34 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                     current_bottom_node = self._append_nuke_script(script, current_bottom_node)
         return current_bottom_node
 
+    def _init_read_node(self, read_node, read_data=None):
+        """ Initializes the read node with the source, input and render frame ranges.
+
+            Args:
+                read_node (Node): The nuke read node to initialize.
+        """
+        import nuke
+
+        read_node.knob("raw").setValue(True)
+        read_node.knob("file").setValue(read_data.get("source"))
+        read_node.knob("first").setValue(read_data.get("input_start_frame"))
+        read_node.knob("last").setValue(read_data.get("input_end_frame"))
+
+        if read_data.get("renumber"):
+            # Unselect all nodes in the script
+            selected_nodes = nuke.selectedNodes()
+            for node in selected_nodes:
+                node.setSelected(False)
+
+            # Select the read node, so that the node we create next will be connected to it.
+            read_node.setSelected(True)
+            
+            # Now create the time offset node
+            time_offset = nuke.createNode("TimeOffset")
+            time_offset.setSelected(False)
+            time_offset.knob("time_offset").setValue(read_data["renumber"] - read_data.get("input_start_frame"))
+            time_offset.setInput(0, read_node)
+
     def set_node_knob_values_from_dict(self, node, value_dict):
         """ Will iterate a given a dictionary of knob_name: value, and will assign 
             each value found to the corresponding knob on the node.
@@ -498,13 +592,27 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             top_node = self._find_top_node(bottom_node)
 
         # Create Read node for self.source
-        read_node = nuke.createNode("Read")
-        read_node.knob("raw").setValue(True)
         print(f"wolfkrow_read: {self.source} {self.input_start_frame}-{self.input_end_frame}")
-        read_node.knob("name").setValue("wolfkrow_read")
-        read_node.knob("file").setValue(self.source)
-        read_node.knob("first").setValue(self.input_start_frame)
-        read_node.knob("last").setValue(self.input_end_frame)
+        read_node = nuke.createNode("Read")
+        read_data = {
+            "source": self.source,
+            "input_start_frame": self.input_start_frame,
+            "input_end_frame": self.input_end_frame,
+            "renumber": self.renumber,
+        }
+        self._init_read_node(read_node, read_data)
+
+        if self.additional_read_node_properties:
+            self.set_node_knob_values_from_dict(read_node, self.additional_read_node_properties)
+
+        # Set up all the additional sources.        
+        for additional_source, data in self.additional_sources.items():
+            additional_source_node = nuke.toNode(additional_source)
+            if additional_source_node is None:
+                print("Warning: Additional source '{}' does not exist. Skipping...".format(additional_source))
+                continue
+
+            self._init_read_node(additional_source_node, data)
 
         if self.additional_read_node_properties:
             self.set_node_knob_values_from_dict(read_node, self.additional_read_node_properties)
@@ -630,6 +738,9 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                 value = write_node.knob(knob).value()
                 correct_knob_values[knob] = value
 
+        ocio_file = root_node.knob("OCIOConfigPath").value()
+        print("Using OCIO: {}".format(ocio_file))
+
         print("Saved Nuke script to: \n\n{}\n\n".format(script_path))
         nuke.scriptSaveAs(script_path, overwrite=1)
 
@@ -646,8 +757,9 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # This bug seems to only manifest when the following conditions are met:
         #   - Nuke is run in terminal mode.
         #   - Specific knobs are set on the Write node. (mov_prores_codec_profile as example)
-        #   - The write node was created in terminal mode. (A pre-existing write 
-        #       node in an opened nuke script lets you set the knob correctly)
+        #   - The write node was created in the current terminal session. (A 
+        #     pre-existing write node in an opened nuke script lets you set the 
+        #     knob correctly)
 
         print ("Validating the nuke script is correct...")
         with open(script_path, "r") as script_file:
@@ -744,6 +856,9 @@ class NukeRenderRun(NukeTask, SequenceTask):
         import nuke
 
         print("Rendering nuke script: \n\n{}\n\n".format(self.script))
+
+        ocio_file = nuke.root().knob("OCIOConfigPath").value()
+        print("Using OCIO: {}".format(ocio_file))
 
         # Open the nuke script.
         nuke.scriptOpen(self.script)
