@@ -351,18 +351,20 @@ class TaskGraph(object):
                 "JobDependencies": dependencies_str,
             }
 
-            # Now add the additional job attributes passed in, which may be required
-            # to run on the local deadline set up.
-            if additional_job_attributes:
-                job_attrs.update(additional_job_attributes)
-
-            # Finally, add the additional job attributes from the configuration file.
+            # Add the additional job attributes from the configuration file.
             additional_job_attrs = self._get_additional_job_attrs(
                 replacements=task.task.replacements,
                 sgtk=task.task.sgtk,
                 task_type=task.task.__class__.__name__
             )
             job_attrs.update(additional_job_attrs)
+
+            # Finally add the additional job attributes passed in, which may be required
+            # to run on the local deadline set up.
+            # Add these attributes after those from the configuration file,
+            # as they may override existing attributes from the file.
+            if additional_job_attributes:
+                job_attrs.update(additional_job_attributes)
 
             # If the task has a start_frame, end_frame, and chunk_size, then add these attributes to the deadline job.
             if (hasattr(task.task, "chunkable") and task.task.chunkable is True and
