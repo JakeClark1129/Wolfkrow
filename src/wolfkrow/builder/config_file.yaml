@@ -7,6 +7,9 @@ task_attribute_defaults:
 
 replacements:
    shotgun_site: "$SHOTGUN_SITE_URL"
+   sequence_publish_path: X:/shows/{project_name}/shots/{sequence}/{shot}/publish/{publish_type}/{publish_name}/v{version}/{file_type}/{prefix}_{shot}_{publish_name}.%04d.exr"
+   sequence_publish_path_mov: X:/shows/{project_name}/shots/{sequence}/{shot}/publish/{publish_type}/{publish_name}/v{version}/mov/{prefix}_{shot}_{publish_name}.mov"
+
 
 resolver_search_paths:
    - /shows/$SHOW/$SEQUENCE/$SHOT/config
@@ -97,7 +100,7 @@ tasks:
       task_type: NukeRender
       dependencies: ['Copy_TO_Plate']
       scripts:
-         - /shows/tp_shotgun/tools/image_tools/snippets/reformat_to_HD.nk
+         - {show_root}/tools/image_tools/snippets/reformat_to_HD.nk
       source: "SGTKTEMPLATE{standalone/turnover/plate}"
       destination: "SGTKTEMPLATE{bb_standalone_turnover_publish_mov}"
       file_type: "mov"
@@ -120,8 +123,94 @@ tasks:
          dw_compression_level: "{compression_level}"
          metadata: "no metadata"
 
+   ##############
+   # Publish
+   ##############
+
+   copy_to_publish:
+      task_type: FileCopy
+      dependencies: []
+      source: "{input_path}"
+      destination: "{artist_publish_path}"
+
+   generate_quicktime:
+      task_type: NukeRender
+      dependencies: []
+      source: "{input_path}"
+      destination: "{artist_publish_path_mov}"
+      file_type: mov
+
+   updaret_sg_version_data:
+      task_type: ShotgunUpdate
+
+
+   upload_sg_version:
+      task_type: UploadMedia
+
+   ###############
+   # Ingest
+   ###############
+
+   process_plates:
+      task_type: NukeRender
+
+   copy_original_plate:
+      task_type: FileCopy
+      source: 
+      destination:
+   
+   copy_grade_file:
+      task_type: FileCopy
+      source:
+      destination:
+
+   copy_lut_file:
+      task_type: FileCopy
+      source:
+      destination:
+
+   ##############
+   # Client Sends
+   ##############
+
+   export_exr:
+      task_type: NukeRender
+      source:
+      destination: 
+
+   export_shot_grade:
+      task_type: FileCopy
+
+   export_mov_h264:
+      task_type: NukeRender
+
+   export_mov_dnxhd:
+      task_type: NukeRender
+
 workflows:
+   Demo Publish:
+      - copy_to_publish
+      - generate_quicktime
+      - update_sg_version_data
+      - upload_sg_version
+
+   Demo Ingest:
+      - process_plates
+      - copy_original_plate
+      - copy_grade_file
+      - copy_lut_file
+
+   Demo Client Export - EXR Final:
+      - export_exr
+      - export_shot_grade
+
+   Demo Client Export - Movs:
+      - export_mov_h264
+      - export_mov_dnxhd
+
    CR2 Convert:
+      user_inputs:
+         - input_file: type: int options: [1,2,3]
       - CR2_Convert
       - Upload_SG_Thumbnail
       - Generate_Quicktime
