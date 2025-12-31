@@ -239,10 +239,6 @@ class TaskGraph(object):
             for i in range(len(args)):
                 args[i] = args[i].strip('"')
 
-            #TODO: The python script being executed here can be a security liability 
-            # since they can be modified between being written out, and being executed 
-            # here. Either add a mechanism for ensuring they have not been modified 
-            # or prevent them from being modified.
             print("\n")
             print("=" * 80)
             print("Executing Task: %s" % task_export.task.full_name)
