@@ -588,19 +588,22 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         for node in all_nodes:
             for knob_name in node.knobs():
                 knob = node[knob_name]
-                knob_value = knob.value()
-                if isinstance(knob_value, basestring):
-                    new_knob_value = self.resolver.resolve(knob_value)
-                    if knob_value != new_knob_value:
-                        try:
-                            knob.setValue(new_knob_value)
-                        except Exception as exception:
-                            import traceback
-                            traceback.print_exc()
-                            print("Warning: Unable to substitute knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(node, knob, knob_value, new_knob_value))
-
+                # NOTE: the `getValue()` method evaluates TCL expressions, so we 
+                #   use `toScript()` instead to get the raw string.
                 index = 0
-                if knob.hasExpression(index):
+                if not knob.hasExpression(index):
+                    knob_value = knob.toScript()
+                    if isinstance(knob_value, basestring):
+                        new_knob_value = self.resolver.resolve(knob_value)
+                        if knob_value != new_knob_value:
+                            try:
+                                knob.setValue(new_knob_value)
+                            except Exception as exception:
+                                import traceback
+                                traceback.print_exc()
+                                print("Warning: Unable to substitute knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(knob.name(), node.name(), knob_value, new_knob_value))
+
+                else:
                     animations = knob.animations()
                     for index, animation in enumerate(animations):
                         expression = animation.expression()
@@ -613,7 +616,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
                             except Exception as exception:
                                 import traceback
                                 traceback.print_exc()
-                                print("Warning: Unable to substitute expression knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(node, knob, knob_value, new_knob_value))
+                                print("Warning: Unable to substitute expression knob '{}' on node '{}' with replacements. Old Value: {} vs. New Value {}".format(knob.name(), node.name(), knob_value, new_knob_value))
 
         script_dir = os.path.dirname(script_path)
         if not os.path.exists(script_dir):
