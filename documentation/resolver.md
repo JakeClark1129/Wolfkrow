@@ -78,6 +78,7 @@ https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-cod
 
 To trigger date substitutions, you must use this format: DATE<strftime_format> where "strftime_format" is the format you want from the datetime documentation.
 
-NOTE: The dates use datetime.now() as the current time, and this value is grabbed once on initialization of the individual task, and re-used.
+NOTE: The dates use datetime.now() as the current time, and this value is grabbed once on initialization of the Resolver.
     Meaning that all DATE<> tokens share a datetime ensuring the time is synced.
-    This also means that if you re-run a Task, then the date is re-calculated, and therefore changes if you run the same task multiple times. Perhaps the task
+    This value is then resolved in the exported Task, which means that the datetime will remain the same regardless of when the exported task is executed.
+    
