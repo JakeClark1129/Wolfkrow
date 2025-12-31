@@ -36,10 +36,12 @@ class TaskExport(object):
         return args
 
     def as_list(self):
-        """ Returns the args as a list rather than a string. """
+        """ Returns the command as a list rather than a string. """
 
         args = []
-        
+
+        args.append(self.executable)
+
         if self.executable_args:
             args.extend(self.executable_args)
             

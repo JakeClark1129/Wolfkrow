@@ -208,12 +208,6 @@ workflows:
       - export_mov_h264
       - export_mov_dnxhd
 
-   CR2 Convert:
-      user_inputs:
-         - input_file: type: int options: [1,2,3]
-      - CR2_Convert
-      - Upload_SG_Thumbnail
-      - Generate_Quicktime
    Export Cutref:
       - Export_Cutref
       - Upload_SG_Thumbnail
