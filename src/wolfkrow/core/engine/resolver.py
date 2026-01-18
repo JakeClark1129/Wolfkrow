@@ -92,6 +92,8 @@ class Resolver(object):
     RESOLVER_TOKEN = "#resolver"
     SGTK_TEMPLATE_REGEX = "(SGTKTEMPLATE<)(.*?)(>)"
     DATETIME_REGEX = "(DATE<)(.*?)(>)"
+    IO_REGEX = "(IO<)(.*?):(.*?)(>)"
+
 
     # We want to store the current time once, so that all date tokens are using the exact same time
     TIME = datetime.datetime.now()
@@ -384,3 +386,21 @@ class Resolver(object):
                 value = value.replace(swap_path, default_os_path)
 
         return value
+
+    @staticmethod
+    def resolve_io_token(value):
+        """ Resolves any IO<> tokens in the given value.
+
+        Args:
+            value (str): The value to resolve the IO tokens in.
+        """
+        match = re.match(Resolver.IO_REGEX, value)
+        
+        # If there is no match, then this input is not linked to an output.
+        if not match:
+            return None, None
+
+        output_task_name = match.group(2)
+        output_attribute_name = match.group(3)
+        
+        return (output_task_name, output_attribute_name)

@@ -68,58 +68,5 @@ class TestSequenceTask(WolfkrowTestCase):
         if len(exported) != expected_export_count:
             error = True
 
-    def test_taskSequenceExecuteSuccess_bash_script_deadline(self):
-        """ Tests that the SequenceTask is able to export its tasks to a bash 
-        script correctly with deadline enabled.
-        """
-        t1 = TestSequence(
-            name="Task1", 
-            start_frame=10, 
-            end_frame=25, 
-            dependencies=[], 
-            replacements={}, 
-            command_line_executable="test",
-            temp_dir="./test_temp"
-        )
-
-        exported = t1.export(export_type="BashScript", deadline=True)
-
-        # Count the amount of tasks there should be
-        expected_export_count = 1
-        if len(exported) != expected_export_count:
-            print("Received an unexpected amount of tasks exported: received: {}, expected: {}".format(
-                len(exported),
-                expected_export_count,
-            ))
-
-        if not exported[0][1].endswith("<STARTFRAME> <ENDFRAME>"):
-            print("Misformed bash script command for deadline. No frame range args passed in (Expected <STARTFRAME> <ENDFRAME>): {}".format(
-                exported[0][1],
-            ))
-
-    def test_taskSequenceExportSuccess_python_script(self):
-        """ Tests that the SequenceTask is able to export its tasks to a python script correctly.
-        """
-        t1 = TestSequence(
-            name="Task1", 
-            start_frame=10, 
-            end_frame=25, 
-            dependencies=[], 
-            replacements={}, 
-            python_script_executable="python",
-            temp_dir="./test_temp"
-        )
-
-        exported = t1.export_to_python_script("test_export")
-
-        expected_export_count = int(math.ceil(float(t1.end_frame - t1.start_frame) / t1.chunk_size))
-        # Count the amount of tasks there should be
-        if len(exported) != expected_export_count:
-            error = True
-            print("Received an unexpected amount of tasks exported: received: {}, expected: {}".format(
-                len(exported),
-                expected_export_count,
-            ))
-
 if __name__ == "__main__":
     unittest.main()

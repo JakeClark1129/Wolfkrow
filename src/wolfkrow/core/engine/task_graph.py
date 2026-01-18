@@ -50,6 +50,13 @@ class TaskGraph(object):
         # Get the settings:
         settings_manager = utils.WolfkrowSettings(settings_file=settings_file)
         self._settings = settings_manager.settings
+        # If setting_file was None, then the WolfkrowSettings class will use 
+        # an environment variable to find the settings file. Store the path it
+        # used here for future use.
+        self._settings_file = settings_manager.settings_file
+
+        self.sql_utils = sql_utils.WolfkrowTaskDatabase.from_settings(settings_manager)
+
         self._tasks = {}
         self._prefix = prefix
         self.name = name
@@ -131,7 +138,7 @@ class TaskGraph(object):
         if not networkx.is_directed_acyclic_graph(self._graph):
             raise TaskGraphValidationException("Task Graph contains circular dependencies.")
 
-    def export_tasks(self, export_type="Json", temp_dir=None, deadline=False):
+    def export_tasks(self, temp_dir=None, deadline=False):
         """ Exports each individual task to its standalone state for execution.
 
             Note: there is some weird logic here to handle tasks that expand into 
@@ -141,8 +148,6 @@ class TaskGraph(object):
             its own dependents during execution?
 
             Kwargs:
-                export_type (str): *Deprecated* Should be set to Json. All other export methods are deprecated.
-                    the format that the Tasks get exported to.
                 temp_dir (str): Path to use for temp files. Will default to the 
                     following values in order.
                     1) Value passed in to this argument
@@ -162,10 +167,16 @@ class TaskGraph(object):
         # Create a copy of the tasks dictionary.
         tasks = copy.copy(self._tasks)
         for task in list(tasks.values()):
+            # Store the settings_file used in this task graph on the 
+            # Task, so it can be used later during execution.
+            task.settings_file = self._settings_file
 
+            # Register the task now, and assign the task it's ID so that it's 
+            # included in the json export file.
+            task.id = self.sql_utils.register_task(task)
+            
             # Export scripts for task.
             exported = task.export(
-                export_type=export_type, 
                 temp_dir=temp_dir, 
                 job_name=self.name,
                 deadline=deadline,
@@ -173,8 +184,11 @@ class TaskGraph(object):
 
             exported_task_names = [export.task.full_name for export in exported]
 
+            exported_tasks[exported[0].task.full_name] = exported[0]
+
             if len(exported) > 1:
                 for exported_task in exported[1:]:
+                    exported_tasks[exported_task.task.full_name] = exported_task
                     self.add_task(exported_task.task, prefix=self._prefix)
                     # Update the new tasks to depend on the original task.
                     self.add_dependency(exported_task.task, task.name)
@@ -194,27 +208,77 @@ class TaskGraph(object):
                         for exported_task in exported[1:]:
                             self.add_dependency(task2, exported_task.task.name)
 
-            for exported_task in exported:
-                # First we register the task in the wolfkrow db.
-                id = sql_utils.register_task(exported_task[0], self._settings)
-                
-                # # Add this task to the exported tasks
-                # exported_tasks[exported_task.task.full_name] = exported_task
-
-                # # Deadline needs special tokens for quotes in order to work correctly.
-                # if deadline and export_type == "BashScript" :
-                #     executable = "<QUOTE>{}<QUOTE>".format(exported_task.executable)
-                #     exported_task.executable = executable
-
+        self.register_exported_tasks_in_db(exported_tasks)
         return exported_tasks
+
+    def register_exported_tasks_in_db(self, exported_tasks):
+        """ Registers all tasks in the task graph in the database.
+        """
+
+        taskExecutionOrder = networkx.topological_sort(self._graph)
+        for task_name in taskExecutionOrder:
+            task_export = exported_tasks.get(task_name)
+            if task_export is None:
+                logging.debug("Skipping Task '%s' because it was added as a "
+                    "dependency, but was never added to the TaskGraph." % task_name)
+                continue
+                
+            # Now we register this tasks outputs in the database.
+            for output_attribute_name in task_export.task.io_attributes["outputs"]:
+                output_task_attribute = task_export.task.io_attributes["outputs"][output_attribute_name]
+
+                id = self.sql_utils.register_output(
+                    task_export.task,
+                    output_attribute_name,
+                )
+                output_task_attribute.set_output_id(task_export.task, id)
+                
+            for input_attribute_name in task_export.task.io_attributes["inputs"]:
+                input_task_attribute = task_export.task.io_attributes["inputs"][input_attribute_name]
+
+                # Parse the input to find which output it's linked to.
+                value = input_task_attribute.__get__(
+                    task_export.task, 
+                    type(task_export.task), 
+                    dont_resolve=True
+                )
+
+                # Linked inputs are optional. If the value is not a string, then
+                # we skip it since it won't match an IO<> token.
+                if not isinstance(value, str):
+                    continue
+                
+                output_task_name, output_attribute_name = Resolver.resolve_io_token(value)
+                
+                # If we can't resolve the input, skip it.
+                if output_task_name is None or output_attribute_name is None:
+                    continue
+
+                output_task_export = exported_tasks.get(output_task_name)
+                if not output_task_export:
+                    logging.warning(f"Input '{input_attribute_name}' on Task "
+                        f"'{task_export.task.full_name}' is linked to output"
+                        f"'{output_attribute_name}' on Task '{output_task_name}', "
+                        f"but that task was not found in the TaskGraph. Skipping"
+                        "input registration." 
+                    )
+                    continue
+
+                output_task_attribute = output_task_export.task.io_attributes["outputs"].get(output_attribute_name)
+
+                id = self.sql_utils.register_input(
+                    task_export.task.id,
+                    input_attribute_name,
+                    output_task_attribute.get_output_id(output_task_export.task)
+                )
+                input_task_attribute.set_input_id(task_export.task, id)
 
     def execute_local(
         self, 
         temp_dir=None,
-        export_type="Json",
     ):
 
-        exported_tasks = self.export_tasks(export_type=export_type, temp_dir=temp_dir)
+        exported_tasks = self.export_tasks(temp_dir=temp_dir)
 
         results = {}
         taskExecutionOrder = networkx.topological_sort(self._graph)
@@ -257,10 +321,10 @@ class TaskGraph(object):
 
             if process.returncode == 0:
                 logging.info("Task '%s' Successfully completed" % task_export.task.full_name)
-                results[task_export.task.full_name] = True
+                results[task_export.task.full_name] = (task_export, True)
             else:
                 logging.error("Task '%s' Failed. Will skip all dependant tasks." % task_export.task.full_name)
-                results[task_export.task.full_name] = False
+                results[task_export.task.full_name] = (task_export, False)
 
         #TODO: Cleanup the tempdir from exported_tasks.
         print("=" * 80)
@@ -328,7 +392,6 @@ class TaskGraph(object):
         environment=None,
         additional_job_attributes=None,
         temp_dir=None,
-        export_type="Json",
         dependency_inheritance=True,
     ):
         """ Executes a task graph on deadline. 
@@ -341,7 +404,6 @@ class TaskGraph(object):
                     (If inherit environment is true, then the 2 environments are 
                     merged and this one take priority)
                 temp_dir (str): Temp directory to use as each tasks temp_dir.
-                export_type (str): The export format for tasks to use.
                 dependency_inheritance (bool): Whether or not to inherit dependencies 
                     from tasks with a different prefix. Typically only relevant when
                     Tasks from multiple TaskGraphs are merged into a single TaskGraph.
@@ -456,7 +518,6 @@ class TaskGraph(object):
 
 
         exported_tasks = self.export_tasks(
-            export_type=export_type, 
             temp_dir=temp_dir, 
             deadline=True,
         )

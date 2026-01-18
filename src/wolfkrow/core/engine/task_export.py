@@ -9,6 +9,7 @@ class TaskExport(object):
         self.task_args = args
 
         self.deadline_id = None
+        self.wolfkrow_id = None
 
     @property
     def command(self):

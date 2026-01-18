@@ -84,26 +84,6 @@ class SequenceTask(Task):
 
         return value
 
-    def _generate_bash_script_contents(self, job_name, temp_dir=None, deadline=False):
-        """ Overrides the default generate bash script method in order to tweak
-        the bash scripts generated for use on deadline.
-        """
-        bash_scripts = super(SequenceTask, self)._generate_bash_script_contents(
-            job_name, temp_dir=temp_dir, deadline=deadline
-        )
-
-        if deadline and self.start_frame is not None and self.end_frame is not None:
-            for index, (task, bash_script) in enumerate(bash_scripts):
-                # Replace deadlines <STARTFRAME> and <ENDFRAME> tokens in the bash 
-                # script with "$1" and "$2" because deadline we are modifying the 
-                # bash script so that deadline will pass the start and end frames 
-                # into the script.
-                bash_script = bash_script.replace("<STARTFRAME>", "$1")
-                bash_script = bash_script.replace("<ENDFRAME>", "$2")
-                bash_scripts[index] = (task, bash_script)
-
-        return bash_scripts
-
     def _export_sequence_task(self, export_method_name, export_method_args):
         """ Will split the given task into chunks by the frame range and export a task for each export.
             Or falls back to the default export process in some circumstances.

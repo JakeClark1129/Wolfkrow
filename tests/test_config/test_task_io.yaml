@@ -1,0 +1,25 @@
+task_attribute_defaults:
+  NukeRender:
+    executable: "wolfkrow_nuke"
+
+replacements:
+   shotgun_site: "$SHOTGUN_SITE_URL"
+
+tasks:
+   output_task:
+      task_type: TestTask_MultiOutput
+      output_file: "output/file/path.%04d.exr"
+      start_frame: 1001
+      end_frame: 1010
+
+   input_task:
+      task_type: TestTask_MultiInput
+      dependencies: [output_task]
+      input_file: IO<output_task:output_file>
+      start_frame: IO<output_task:start_frame>
+      end_frame: IO<output_task:end_frame>
+
+workflows:
+   task_io:
+      - output_task
+      - input_task

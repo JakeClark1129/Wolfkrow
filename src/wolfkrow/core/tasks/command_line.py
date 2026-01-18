@@ -48,7 +48,7 @@ class CommandLine(SequenceTask):
     inputs = ["file_sequence"]
     outputs = ["file_sequence"]
 
-    def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
         """ Overwrites the default behavior of this method to just recreate 
             the command line script to run from the script and args attributes.
 

@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 from builtins import str
+import uuid
 from past.builtins import basestring
 from builtins import object
 import ast
@@ -19,6 +20,10 @@ from weakref import WeakKeyDictionary
 from wolfkrow.core.engine.resolver import Resolver
 from wolfkrow.core.engine.task_export import TaskExport
 from wolfkrow.core.tasks.task_exceptions import TaskException
+from wolfkrow.core.connections.connection import ConnectionDirection
+from wolfkrow.core import utils
+from wolfkrow.core.engine import sql_utils
+
 from future.utils import with_metaclass
 
 
@@ -28,8 +33,18 @@ class TaskAttribute(object):
         on a Task, such as what the type should be, and whether or not it should show up as a configurable attribute on the workflow designer.
     """
 
-    def __init__(self, default_value=None, configurable=False, attribute_options=None, 
-        attribute_type=None, required=False, auto_resolve=True, serialize=True, description=None):
+    def __init__(self,
+        default_value=None,
+        configurable=False,
+        attribute_options=None,
+        attribute_type=None,
+        connection_flags=0,
+        connection_direction=0,
+        required=False,
+        auto_resolve=True,
+        serialize=True,
+        description=None
+    ):
         """ Initialize the TaskAttribute object.
         
             Kwargs:
@@ -57,11 +72,15 @@ class TaskAttribute(object):
         # while we are iterating through the dictionary, then weird stuff can happen. 
         # (Meaning don't iterate through this dictionary!)
         self.data = WeakKeyDictionary()
+        self.input_ids = WeakKeyDictionary()
+        self.output_ids = WeakKeyDictionary()
 
         self.default_value = default_value
         self.configurable = configurable
         self.attribute_options = attribute_options
         self.attribute_type = attribute_type
+        self.connection_flags = connection_flags
+        self.connection_direction = connection_direction
         self.serialize = serialize
         self.description = description
         self.required = required
@@ -105,6 +124,36 @@ class TaskAttribute(object):
             # to easily get a reference to the descriptor object. (Which allows 
             # us to access the metadata about this attribute easily)
             return self
+
+    def get_input_id(self, instance, instance_type=None):
+        """ Getter function for getting a unique ID for this TaskAttribute
+            on the specified instance.
+        """
+
+        id = self.input_ids.get(instance)
+        return id
+    
+    def set_input_id(self, instance, id):
+        """ Setter function for setting a unique ID for this TaskAttribute
+            on the specified instance.
+        """
+
+        self.input_ids[instance] = id
+        
+    def get_output_id(self, instance, instance_type=None):
+        """ Getter function for getting a unique ID for this TaskAttribute
+            on the specified instance.
+        """
+
+        id = self.output_ids.get(instance)
+        return id
+    
+    def set_output_id(self, instance, id):
+        """ Setter function for setting a unique ID for this TaskAttribute
+            on the specified instance.
+        """
+
+        self.output_ids[instance] = id
 
     def __set__(self, instance, value):
         """ Setter function. Will set the given value in the data dictionary using 
@@ -218,12 +267,16 @@ class TaskType(type):
         # we can access them later in the workflow designer. They need to be kept 
         # in order because the workflow designer should display the TaskAttributes 
         # in the order that they are added to the class.
-        # Note: Turns out that this is a wrong assumption. Values do not appear in __dict__ in the same order that they are added to the class. (I Think this is a python 2.7 vs 3.x difference).
         classObj.task_attributes = collections.OrderedDict()
+        classObj.io_attributes = {"inputs": collections.OrderedDict(), "outputs": collections.OrderedDict()}
         for cl in reversed(classObj.__mro__[:-1]):
             for name, attr in list(cl.__dict__.items()):
                 if isinstance(attr, TaskAttribute):
                     classObj.task_attributes[name] = attr
+                    if attr.connection_direction & ConnectionDirection.INPUT:
+                        classObj.io_attributes["inputs"][name] = attr
+                    if attr.connection_direction & ConnectionDirection.OUTPUT:
+                        classObj.io_attributes["outputs"][name] = attr
 
         # Register all tasks to the wolfkrow.core.tasks module.
         from wolfkrow.core.tasks import all_tasks
@@ -258,6 +311,7 @@ class Task(with_metaclass(TaskType, object)):
 
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
     name_prefix = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
+    id = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
     dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
     external_dependencies = TaskAttribute(default_value="", configurable=False, attribute_type=str, serialize=False,
         description="""Comma separated list of dependency ID's that are not part of the task graph. These are the ID's of existing tasks which must be completed before this task can start. Currently only relevant for Deadline submission.""")
@@ -269,6 +323,12 @@ class Task(with_metaclass(TaskType, object)):
         configurable=False,
         attribute_type=list,
         description="""List of config files used to reconstruct the Loader object on the farm."""
+    )
+    settings_file = TaskAttribute(
+        default_value=None,
+        configurable=False,
+        attribute_type=str,
+        description="""Settings file used to reconstruct the Wolfkrow settings on the farm."""
     )
 
     temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
@@ -283,10 +343,6 @@ class Task(with_metaclass(TaskType, object)):
     command_line_executable_args =  TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     sgtk =                          TaskAttribute(default_value=None, configurable=False, serialize=False)
 
-    # Define the inputs and outputs for a Task.
-    inputs = []
-    outputs = []
-
     def __init__(self, **kwargs):
         """ Initializes Task object
 
@@ -297,6 +353,11 @@ class Task(with_metaclass(TaskType, object)):
                 dependencies list[str]: List of other task names that this task depends on
                 replacements: dict{str: str}: A dictionary of values that will be used by the task object later on.
         """
+        
+        # Placeholder for sql utils object. This will be set by the TaskGraph when
+        # the task is exported from the TaskGraph.
+        self._sql_utils = None
+        
         # Create a copy of the replacements. Every task should be responsible for 
         # it's own replacements after creation.
         replacements = kwargs.get("replacements", {})
@@ -371,13 +432,19 @@ class Task(with_metaclass(TaskType, object)):
                 TaskValidationException: Invalid task configuration.
         """
 
+        self.resolve_inputs()
+
         self.setup()
         try: 
-            return self.run()
+            result = self.run()
         except Exception as e:
             traceback.print_exc()
             logging.error("Run method for task '%s' Failed. Reason: %s" % (self.name, e))
             return 1
+        else:
+            self.resolve_outputs()
+            return result
+
 
     def validate(self):
         """ Method for Validating that this task Object was properly created. 
@@ -386,6 +453,62 @@ class Task(with_metaclass(TaskType, object)):
             Validation happens as the first step of the export process.
         """
         pass
+
+    def resolve_inputs(self,):
+        """ Resolves all of the input connections for this task.
+        """
+
+        # load sql_utils
+        if self._sql_utils is None:
+            settings = utils.WolfkrowSettings(self.settings_file)
+            self._sql_utils = sql_utils.WolfkrowTaskDatabase.from_settings(settings)
+
+        for attribute_name, task_attribute in self.io_attributes["inputs"].items():
+
+            # Get the value of the input attribute
+            # Parse the input to find if it's linked to an output.
+            value = task_attribute.__get__(
+                self, 
+                type(self), 
+                dont_resolve=True
+            )
+
+            if not isinstance(value, str):
+                return 
+
+            output_task_name, output_attribute_name = self.resolver.resolve_io_token(value)
+            
+            # No match means this is just a regular value, so don't resolve it.
+            if output_task_name is None or output_attribute_name is None:
+               return
+
+
+            value = self._sql_utils.retrieve_input_data(self.id, attribute_name)
+
+            if value is not None:
+                # Set the value on the TaskAttribute
+                setattr(self, attribute_name, value)
+
+    def resolve_outputs(self):
+
+        # load sql_utils
+        if self._sql_utils is None:
+            settings = utils.WolfkrowSettings(self.settings_file)
+            self._sql_utils = sql_utils.WolfkrowTaskDatabase.from_settings(settings)
+
+        for attribute_name, task_attribute in self.io_attributes["outputs"].items():
+            # Get the TaskAttribute object for this output
+            if task_attribute is None:
+                raise TaskException("Output connection '%s' not found on task '%s'" % (attribute_name, self.name))
+
+            # Get the ID, and value of the output attribute1
+            output_value = task_attribute.__get__(
+                self, 
+                type(self), 
+                dont_resolve=True
+            )
+
+            self._sql_utils.register_output_data(self.id, attribute_name, output_value)
 
     def setup(self):
         """ Abstract method for doing initial tasks required for the run method to 
@@ -454,7 +577,7 @@ class Task(with_metaclass(TaskType, object)):
         """
         return attribute_value
 
-    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False, export_json=True):
+    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False):
         """
         Generates a `wolfkrow_run_task` command line command to run in order to
         re-construct and run this task via command line.
@@ -492,44 +615,33 @@ class Task(with_metaclass(TaskType, object)):
 
         task_args = []
 
-        if export_json:
-            # If the executable is Wolfkrow, then write all the args to a JSON
-            # file and pass the path in as a single arg
-            json_file_path = self._get_script_path(
-                extension="json", job_name=job_name, temp_dir=temp_dir
+        # If the executable is Wolfkrow, then write all the args to a JSON
+        # file and pass the path in as a single arg
+        json_file_path = self._get_script_path(
+            extension="json", job_name=job_name, temp_dir=temp_dir
+        )
+
+        try:
+            with open(json_file_path, "w") as json_file:
+                json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+
+        except Exception as exception:
+            raise TaskException(
+                "Couldn't write args JSON file to path: %s - %s"
+                % (json_file_path, exception)
             )
 
-            try:
-                with open(json_file_path, "w") as json_file:
-                    json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+        start_frame = task_args_dict.get("start_frame")
+        end_frame = task_args_dict.get("end_frame")
 
-            except Exception as exception:
-                raise TaskException(
-                    "Couldn't write args JSON file to path: %s - %s"
-                    % (json_file_path, exception)
-                )
+        # Include the start + end frames, as we want Deadline to be able to
+        # replace them for chunked jobs
+        if start_frame not in (None, "None"):
+            task_args.append("--start_frame \"%s\"" % start_frame)
+        if end_frame not in (None, "None"):
+            task_args.append("--end_frame \"%s\"" % end_frame)
 
-            start_frame = task_args_dict.get("start_frame")
-            end_frame = task_args_dict.get("end_frame")
-
-            # Include the start + end frames, as we want Deadline to be able to
-            # replace them for chunked jobs
-            if start_frame not in (None, "None"):
-                task_args.append("--start_frame \"%s\"" % start_frame)
-            if end_frame not in (None, "None"):
-                task_args.append("--end_frame \"%s\"" % end_frame)
-
-            task_args.append("--json_args_file \"%s\"" % json_file_path)
-
-        else:
-            # For other executables, pass the args in as "--key value" pairs
-            for attribute_name, attribute_value in task_args_dict.items():
-                task_args.append(
-                    "--{attribute_name} {value}".format(
-                        attribute_name=attribute_name,
-                        value=attribute_value
-                    )
-                )
+        task_args.append("--json_args_file \"%s\"" % json_file_path)
 
         # Now put together the arg string
         arg_str = "--task_name {task_name} ".format(task_name=self.__class__.__name__)
@@ -544,144 +656,18 @@ class Task(with_metaclass(TaskType, object)):
 
         return [exported_task]
 
-    def _generate_bash_script_contents(self, job_name, temp_dir=None, deadline=False):
-        """
-        Generates the contents for a bash script export. Default implementation
-        is just based on the CommandLine export.
-
-        Args:
-            job_name (str): The name of the job that this task is a part of.
-                Only used to generate the script's name.
-
-        Kwargs:
-            temp_dir (str): temp directory to use for the command line export.
-            deadline (bool): whether or not to prepare this task for Deadline.
-        """
-        command_line_export = self.export_to_command_line(
-            job_name=job_name, temp_dir=temp_dir, deadline=deadline
-        )
-
-        bash_scripts = []
-        bash_script_template = textwrap.dedent(
-            """
-            #!/usr/bin/env bash
-
-            {command}
-            """
-        ).strip()
-
-        for task, bash_command in command_line_export:
-            bash_script = bash_script_template.format(command=bash_command)
-            bash_scripts.append((task, bash_script))
-
-        return bash_scripts
-
-    def export_to_bash_script(self, job_name, temp_dir=None, deadline=False):
-        """ Uses the standard export to command line method, then writes that to 
-        a bash script.
-
-        Args:
-            job_name (str): name of the job this task is a part of. Only used in generation of the scripts name.
-
-        Kwargs:
-            temp_dir (str): temp directory to write the stand alone python script to.
-            deadline (bool): whether or not to prepare this task for deadline.
-        """
-
-        bash_scripts = self._generate_bash_script_contents(job_name, deadline=deadline)
-
-        bash_script_exports = []
-
-        for task, bash_script in bash_scripts:
-            bash_script_path = task._get_script_path(
-                extension="sh", 
-                job_name=job_name,
-                temp_dir=temp_dir
-            )
-
-            with open(bash_script_path, 'w') as handle:
-                handle.write(bash_script)
-
-            # Ensure that the script is readonly for the person exporting. This 
-            # is due to a security vulnerability due to some Task types containing 
-            # sensitive data. Such as the SG tasks which may contain api keys or
-            # auth tokens.
-            # We also want to prevent write access to prevent someone modifying 
-            # the script between creation and execution.
-            # TODO: ensure this also works on Windows.
-            os.chmod(bash_script_path, 0o500) # Sets "r-x------" permissions
-
-            bash_script_exports.append((task, bash_script_path))
-
-        return bash_script_exports
-
-    def export_to_python_script(self, job_name, temp_dir=None, deadline=False):
-        """ Will Export this task into a stand alone python script in order to run this task later. 
-            
-            Note: This a fairly generic implementation that takes advantage of 
-                __repr__ on each task, then does some logic to determine imports 
-                required, then writes a .py file that can be executed on its own 
-                to execute this task.
-
-            Args:
-                job_name (str): name of the job this task is a part of. Only used in generation of the scripts name.
-
-            Kwargs:
-                temp_dir (str): temp directory to write the stand alone python script to.
-
-            returns:
-                (str) - The file path to the exported task.
-        """
-
-        if self.python_script_executable is None:
-            raise TaskException("WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE variable undefined and no executable specified.")
-
-        file_path = self._get_script_path(
-            extension="py",
-            job_name=job_name,
-            temp_dir=temp_dir
-        )
-
-        obj_str = repr(self)
-        contents = """
-import sys
-from {module} import {obj_type}
-callable = {obj_str}
-ret = callable()
-sys.exit(ret)""".format(
-            module=self.__class__.__module__,
-            obj_type=self.__class__.__name__,
-            obj_str=obj_str
-        )
-
-        with open(file_path, 'w') as handle:
-            handle.write(contents)
-
-        # Ensure that the script is readonly for the person exporting. This 
-        # is due to a security vulnerability due to some Task types containing 
-        # sensitive data. Such as the SG tasks which may contain api keys or
-        # auth tokens.
-        # We also want to prevent write access to prevent someone modifying 
-        # the script between creation and execution.
-        # TODO: ensure this also works on Windows.
-        os.chmod(file_path, 0o500) # Sets "r-x------" permissions
-
-        return [(self, file_path)]
-
-    def export(self, export_type="Json", temp_dir=None, job_name=None, deadline=False):
+    def export(self, temp_dir=None, job_name=None, deadline=False):
         """ Will Export this task in order to run later. This is to allow for 
             synchronous execution of many tasks among many machines. Intended 
             to be used alongside a distributed render manager (Something like 
             Tractor2, or deadline).
 
-            Args:
-                export_type (str): *Deprecated* Should be "Json". All other export methods are deprecated.
-            
             Kwargs:
                 temp_dir (str): Passed onto the PythonScript export method. 
                     Used to choose where to write the python script to.
                 job_name (str): Passed onto the PythonScript export method. 
                     Used to choose the name of the exported python script.
+                deadline (bool): Whether or not to prepare this task for Deadline.
 
             returns:
                 (self, created_obj) - created_obj will either be a command line string to run OR the file path to a python script.
@@ -711,39 +697,20 @@ sys.exit(ret)""".format(
         # Note: The sub_tasks are exported first incase exporting the subtasks 
         # changes any attributes in the parent task.
         sub_tasks = self.export_subtasks(
-            export_type, 
             temp_dir=self.temp_dir, 
             job_name=job_name, 
             deadline=deadline
         )
 
-        # Export the parent task.
-        if export_type == "CommandLine":
-            exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=False)
-            )
-        elif export_type == "Json":
-            exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
-            )
-        elif export_type == "BashScript":
-            exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
-        elif export_type == "PythonScript":
-            exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
-        elif export_type == "Json":
-            exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
-            )
-        else:
-            raise TaskException("Unknown export type: {}. Expected one of 'CommandLine', 'BashScript', or 'PythonScript'".format(
-                export_type
-            ))
+        exported_tasks.extend(
+            self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
+        )
 
         # Add the sub tasks to the exported tasks list.
         exported_tasks.extend(sub_tasks)
         return exported_tasks
 
-    def export_subtasks(self, export_type, temp_dir=None, job_name=None, deadline=False):
+    def export_subtasks(self, temp_dir=None, job_name=None, deadline=False):
         all_exported_subtasks = []
         subtasks = self.get_subtasks()
 
@@ -752,7 +719,6 @@ sys.exit(ret)""".format(
 
         for subtask in subtasks:
             exported_subtasks = subtask.export(
-                export_type,
                 temp_dir=temp_dir,
                 #job_name=job_name,
                 deadline=deadline

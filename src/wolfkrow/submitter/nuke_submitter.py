@@ -150,7 +150,6 @@ class NukeUI(QtWidgets.QWidget):
             deadline_jobs = task_graph.execute_deadline(
                 batch_name=batch_name,
                 inherit_environment=True,
-                export_type="Json",
                 temp_dir=settings.get("nuke_submitter", {}).get("temp_dir"),
             )
             report_data["deadline_jobs"].extend(deadline_jobs)

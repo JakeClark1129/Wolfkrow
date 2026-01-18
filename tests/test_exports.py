@@ -34,20 +34,6 @@ class TestTaskExport(WolfkrowTestCase):
         if os.path.exists("./test_temp"):
             shutil.rmtree("./test_temp", onerror=on_rm_error)
 
-    def test_BashScript_export(self):
-        """ Tests the standard Task export and execute local method. This test is 
-        meant to be a basic integration test to ensure that you are able to initialize
-        a Task Object, add it to a task graph, and the execute the task graph.
-
-        Tests BashScript export type.
-        """
-        job = task_graph.TaskGraph("test_BashScript_export")
-        t1 = TestSequence(name="Task1", start_frame=10, end_frame=25, dependencies=[], replacements={}, command_line_executable="test")
-
-        job.add_task(t1)
-
-        job.execute_local(export_type="BashScript")
-
     def test_BashScript_export_deadline(self):
         """ Tests the standard Task export and execute local method. This test is 
         meant to be a basic integration test to ensure that you are able to initialize

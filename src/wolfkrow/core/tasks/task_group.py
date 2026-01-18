@@ -36,46 +36,6 @@ class TaskGroup(Task):
             "order that they are specified here."
     )
 
-    def _write_python_group_file(self, file_handle, exported_tasks):
-        """ Writes a task exported via the PythonCommand method to the file_handle
-        provided. 
-
-        Args:
-            file_handle (File): Opened File handle to write to. Calling code is 
-                responsible for cleaning up the file_handle afterwards.
-            exported_tasks (List): A list of all the exported tasks.
-        """
-        # Write a shebang which will call python. This will most likely go unused,
-        # since the python executable to use is explicitly set later.
-        file_handle.write("#! /usr/bin/env python\n\n")
-
-        file_handle.write("import sys\n\n")
-
-        # Add an "all_success" variable to use as the return value in the end.
-        file_handle.write("all_success = 0\n\n")
-
-        # Iterate over all of the exported tasks.
-        for exported_task, export_str in exported_tasks:
-            # Open the python file pointed to by the export_str
-            # See Task.export_to_python_script method for exported python script logic.
-            with open(export_str, "r") as fh:
-                content = fh.readlines()
-
-            # Strip the first and last line of the python file because they are 
-            # calling "import sys" and "sys.exit" which we don't want.
-            content = content[2:-1]
-
-            # Modify the content list so that is set the "all_success" variable 
-            # based on return value.
-            content.append("if ret != 0:\n")
-            content.append("    all_success = 1\n\n")
-
-            # Now write each line back to the group file.
-            for line in content:
-                file_handle.write(line)
-
-        file_handle.write("sys.exit(all_success)")
-
     def _write_command_line_group_file(self, file_handle, exported_tasks):
         """ Writes a task exported via the CommandLine method to the file_handle
         provided.
@@ -97,34 +57,22 @@ class TaskGroup(Task):
             file_handle.write(export_str)
             file_handle.write("\n\n")
 
-    def _write_group_file(self, export_type, exported_tasks, group_file_path):
+    def _write_group_file(self, exported_tasks, group_file_path):
         """ Writes all of the exported tasks to a single file which can be executed
         on the farm.
 
         Args:
-            export_type (str): The export type which was used to export the tasks.
             exported_tasks (list): A list of all the exported tasks.
             group_file_path (str): The file path to the write the combined tasks to.
                 This is the file path which will get executed later.
         """
 
         with open(group_file_path, "w") as fh:
-            if export_type == "PythonScript":
-                self._write_python_group_file(fh, exported_tasks)
-            elif export_type == "CommandLine":
-                self._write_command_line_group_file(fh, exported_tasks)
-            elif export_type == "BashScript":
-                # TODO: Implement this
-                raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
-            else:
-                raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
+            self._write_command_line_group_file(fh, exported_tasks)
 
-    def export(self, export_type, temp_dir=None, job_name=None, deadline=False):
+    def export(self, temp_dir=None, job_name=None, deadline=False):
         """ Overrides the default export method to allow it to combine all of the
         tasks configured into a single file which can be executed later on.
-
-        Args:
-            export_type (str): The export method to use to export the grouped tasks.
 
         Kwargs:
             temp_dir (str): temp directory used to write the grouped task bash file.
@@ -133,6 +81,11 @@ class TaskGroup(Task):
             deadline (bool): whether or not to prepare the exported tasks for deadline.
                 TODO: This arguement seemingly does nothing... Lets remove it.
         """
+        
+        raise NotImplementedError(
+            "TaskGroup export must be updated to accommodate json export type."
+        )
+        
         self.validate()
 
         from ...builder.workflow_builder import Loader
@@ -168,31 +121,21 @@ class TaskGroup(Task):
                 raise TaskValidationException("Cannot group Sequence tasks when executing on deadline.")
 
             exported_tasks_ = task.export(
-                export_type, 
                 temp_dir=temp_dir, 
                 job_name=job_name, 
                 deadline=deadline
             )
             exported_tasks.extend(exported_tasks_)
 
-        group_path_extension = ".py" if export_type == "PythonScript" else ".bash"
+        group_path_extension = ".sh"
 
         # Determine the file path to the group output file.
         group_file_path = os.path.join(temp_dir, self.name + group_path_extension)
 
         # Write the exported tasks to the grouped task output file.
-        self._write_group_file(export_type, exported_tasks, group_file_path)
+        self._write_group_file(exported_tasks, group_file_path)
 
         # The task graph expects different outputs based on the export type.
-        if export_type == "CommandLine":
-            export_command = "bash " + group_file_path
-        elif export_type == "PythonScript":
-            export_command = group_file_path
-        elif export_type == "BashScript":
-            # TODO: Implement this
-            raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
-        else:
-            raise TaskValidationException("Unsupported Export Type received: {}".format(export_type))
-
+        export_command = "bash " + group_file_path
 
         return [(self, export_command)]

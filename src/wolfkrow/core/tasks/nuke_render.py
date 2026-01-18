@@ -9,6 +9,8 @@ import logging
 import os
 import re
 
+from wolfkrow.core.connections.connection import ConnectionTypes, ConnectionDirection, Connection
+
 from .task import Task, TaskAttribute, TaskIO
 from .sequence_task import SequenceTask
 from .task_exceptions import TaskValidationException
@@ -16,7 +18,7 @@ from .task_exceptions import TaskValidationException
 from wolfkrow.core.engine.resolver import Resolver
 
 class NukeTask(Task):
-    def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
+    def export_to_command_line(self, job_name, temp_dir=None, deadline=False):
         """ Will generate a `wolfkrow_run_task` command line command to run in 
             order to re-construct and run this task via command line. 
 
@@ -66,7 +68,13 @@ class NukeRender(NukeTask):
     )
 
     # Attributes for read node
-    source = TaskAttribute(default_value="", configurable=True, attribute_type=str)
+    source = TaskAttribute(
+        default_value="", 
+        configurable=True, 
+        attribute_type=str, 
+        connection_flags=ConnectionTypes.FILE_SEQUENCE | ConnectionTypes.FILE, 
+        connection_direction=ConnectionDirection.INPUT,
+    )
 
     # Attributes for write node
     write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
@@ -76,7 +84,14 @@ class NukeRender(NukeTask):
     determine its own name (recommended)
         """
     )
-    destination = TaskAttribute(default_value="", configurable=True, attribute_type=str)
+    destination = TaskAttribute(
+        default_value="", 
+        configurable=True, 
+        attribute_type=str,
+        connection_flags=ConnectionTypes.FILE_SEQUENCE | ConnectionTypes.FILE,
+        connection_direction=ConnectionDirection.OUTPUT,
+    )
+
     file_type = TaskAttribute(default_value="exr", configurable=True, attribute_type=str)
     bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
     codec = TaskAttribute(default_value=8, configurable=True, attribute_type=str, 
@@ -184,9 +199,9 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
 
     # Define the inputs and outputs for a Task.
     inputs = {
-        "file_sequence": source, 
-        "start_frame": input_start_frame, 
-        "end_frame": input_end_frame
+        "file_sequence": Connection("file_sequence", ConnectionTypes.FILE_SEQUENCE | ConnectionTypes.FILE, direction="input"), 
+        "start_frame": Connection("start_frame", ConnectionTypes.START_FRAME, direction="input"), 
+        "end_frame": Connection("end_frame", ConnectionTypes.END_FRAME, direction="input")
     }
     outputs = {
         "file_sequence": destination, 

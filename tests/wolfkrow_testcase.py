@@ -14,7 +14,7 @@ class WolfkrowTestCase(unittest.TestCase):
             os.makedirs("./test_temp")
 
         os.environ["TEST_ROOT"] = self._get_test_root()
-        os.environ["WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE"] = "wolfkrow_run_task"
+        #os.environ["WOLFKROW_DEFAULT_COMMAND_LINE_EXECUTABLE"] = "wolfkrow_run_task"
 
     def tearDown(self):
         def on_rm_error( func, path, exc_info):

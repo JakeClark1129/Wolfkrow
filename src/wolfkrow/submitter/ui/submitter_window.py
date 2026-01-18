@@ -513,7 +513,6 @@ class IngestUI(QtGui.QWidget):
                 batch_name=batch_name,
                 inherit_environment=False,
                 environment=environment,
-                export_type="CommandLine",
                 temp_dir=r"X:\__pipeline\sandbox\jacob.clark\temp",
                 shell="cmd",
             )
