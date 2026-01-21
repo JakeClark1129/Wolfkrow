@@ -361,7 +361,7 @@ class TaskGraph(object):
             job_attrs = {
                 "Name": task_export.task.full_name,
                 "BatchName": batch_name,
-                "Plugin": "CommandLine",
+                "Plugin": "WolfkrowTask",
                 "JobDependencies": dependencies_str,
             }
 
@@ -439,8 +439,13 @@ class TaskGraph(object):
                 var_index += 1
 
             plugin_attrs = {
-                "Executable": task.executable,
-                "Arguments": task.args,
+                "TaskName": task.task.__class__.__name__,
+                "Executable": task_export.executable,
+                "ExecutableArgs": " ".join(task_export.executable_args),
+                "JsonArgsFile": task.json_args_file,
+                "StartFrame": task_export.start_frame,
+                "EndFrame": task_export.end_frame,
+                "AdditionalArgs": " ".join(task_export.additional_args),
             }
 
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)
