@@ -6,6 +6,7 @@ import re
 from wolfkrow.core.tasks.task import Task, TaskAttribute
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
+
 class ShotgunTask(Task):
     """ Base Task for all tasks that interact with shotgun. This task handles 
         creation of a shotgun connection, and authentication.
@@ -120,65 +121,3 @@ class ShotgunTask(Task):
                 script_name=self.script_name, 
                 api_key=self.api_key
             )
-
-
-    def process_sg_fields(self, fields):
-        """ Process SG fields to ensure they are in the correct format for the shotgun api.
-
-            Args:
-                fields (dict): The fields to process
-
-            Returns:
-                dict: The processed fields
-        """
-
-        entity_schema = self._sg.schema_field_read(self.entity_type)
-
-        processed_fields = {}
-
-        sg_type_conversion_map = {
-            "number": int,
-            "float": float,
-            "entity": dict,
-        }
-
-        for field in fields:
-            field_value = fields[field]
-
-            sg_schema_type = entity_schema.get(field, {}).get("data_type", {}).get("value")
-            python_schema_type = sg_type_conversion_map.get(sg_schema_type)
-
-            # If our field is not the same type that the SG Scheme expects, then let's convert it.
-            if python_schema_type and not isinstance(field_value, python_schema_type):
-                field_value = TaskAttribute.convert_to_type(field_value, python_schema_type)
-
-            # For Entities we check for the ID field and convert it to an int.
-            if sg_schema_type == "entity" and isinstance(field_value, dict):
-                field_value = field_value.copy() # Copy the dict so we don't modify the original
-
-                id = field_value.get("id")
-                if id:
-                    try:
-                        field_value["id"] = int(id)
-                    except ValueError:
-                        print("Warning: Could not convert ID to int: {}".format(id))
-
-            elif sg_schema_type == "url" and isinstance(field_value, dict):
-                field_value = field_value.copy() # Copy the dict so we don't modify the original
-
-                # SG has a bug on Windows where backslashes MUST be used for the 
-                # drive letter, or it doubles up on the drive letter.
-                # Autodesk internal Ticket number to reference to follow up on this issue:
-                #   SG-4373
-                windows_path_regex = "[a-zA-Z]:/"
-                for key in field_value:
-                    if key == "local_path" or key == "local_path_windows":
-                        if re.match(windows_path_regex, field_value[key]):
-                            print("Warning: Detected Windows Drive Letter path in field '{}'. ".format(field))
-                            print("    Converting slashes to backslashes.")
-                            print("    This is required due to a bug in Shotgun")
-                            field_value[key] = field_value[key].replace("/", "\\")
-
-            processed_fields[field] = field_value
-
-        return processed_fields

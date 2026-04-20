@@ -65,7 +65,7 @@ class ShotgunUpdateEntity(ShotgunTask):
         """ Preforms the thumbnail upload
         """
 
-        fields = self.process_sg_fields(self.fields)
+        fields = self.resolver.process_sg_fields(self.fields)
 
         entity = self._sg.update(self.entity_type, self.shotgun_id, fields)
         print("Updated entity: {}".format(entity))

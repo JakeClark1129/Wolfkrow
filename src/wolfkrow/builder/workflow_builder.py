@@ -8,6 +8,7 @@ import yaml
 from ..core import tasks
 from ..core.engine.task_graph import TaskGraph
 from ..core.engine.resolver import Resolver
+from ..core.engine.sources import SourceResolver
 
 class LoaderException(Exception):
     """ Exception for generic Task errors
@@ -41,6 +42,26 @@ class Loader(object):
         self.replacements = replacements or {}
         self._sgtk = sgtk
         self.temp_dir = temp_dir
+
+        # =================================================
+        # ==================== debugpy ====================
+        # =================================================
+        import sys
+        sys.path.append("C:\\Users\\jacob.clark\\AppData\\Roaming\\Python\\Python39\\site-packages")
+        sys.path.append("C:\\Users\\jacob.clark\\AppData\\Roaming\\Python\\Python39\\_site-packages")
+        sys.path.append("X:\\__pipeline\\software\\__packages\\thirdparty\\debugpy\\1.8.20\\e7b64aebe77c11047a71e73bebf05e90cbb6361d\\python")
+        import debugpy
+        debugpy.configure(python="C:\\Program Files\\Python39\\python.exe")
+        try:
+            debugpy.listen(("localhost", 5678))
+        except Exception as e:
+            pass
+        print("Waiting for debugger attach")
+        debugpy.wait_for_client()
+        debugpy.breakpoint()
+        # =================================================
+        # =================================================
+        # =================================================
 
     @property
     def config(self):
@@ -78,6 +99,13 @@ class Loader(object):
             else:
                 current_dict["tasks"].update(tasks_dict)
 
+        sources_dict = new_dict.get("sources")
+        if sources_dict:
+            if "sources" not in current_dict:
+                current_dict["sources"] = sources_dict
+            else:
+                current_dict["sources"].update(sources_dict)
+
         replacements_dict = new_dict.get("replacements")
         if replacements_dict:
             if "replacements" not in current_dict:
@@ -113,9 +141,9 @@ class Loader(object):
 
     def _load_configs(self, config_file_paths):
         config = {}
+        # Replace any replacements in the config file paths.
         for config_file in config_file_paths:
 
-            # Replace any replacements in the config file paths.
             resolver = Resolver(self.replacements, sgtk=self._sgtk)
             config_file = resolver.resolve(config_file)
 
@@ -135,6 +163,8 @@ class Loader(object):
         # into the tool, or viceversa?
         self.replacements.update(config.get('replacements', {}))
 
+        sources_config = config.get("sources", {})
+        self.source_resolver = SourceResolver(sources_config, resolver=resolver, sgtk=self._sgtk)
         return config
 
     def _create_task(self, task_name):
@@ -215,16 +245,33 @@ class Loader(object):
 
     def parse_workflow(self, workflow_name, prefix=None):
 
+        workflow_config = self.config['workflows'].get(workflow_name)
+        if workflow_config is None:
+            raise LoaderException("Unable to find workflow '{}'".format(workflow_name))
+
+        # Support both old and new workflow config formats for backwards 
+        # compatibility. The old format is just a list of tasks, while the new 
+        # format supports a "sources" field and a "tasks" field.
+        if isinstance(workflow_config, list):
+            workflow_sources = []
+            workflow_tasks = workflow_config
+        else:
+            workflow_sources = workflow_config.get("sources", [])
+            workflow_tasks = workflow_config.get("tasks", [])
+
+        if not workflow_tasks:
+            raise LoaderException("Workflow '{}' does not have any tasks defined.".format(workflow_name))
+
+        replacements = {}
+        for source in workflow_sources:
+            replacements.update(self.source_resolver.resolve_source(source))
+
+        replacements.update(self.replacements)
         task_graph = TaskGraph(
             workflow_name, 
-            replacements=self.replacements, 
+            replacements=replacements,
             temp_dir=self.temp_dir,
         )
-        workflow_tasks = self.config['workflows'].get(workflow_name)
-
-        if workflow_tasks is None:
-            raise Exception("Unable to find workflow '{}'".format(workflow_name))
-
         for task_name in workflow_tasks:
             task = self._create_task(task_name)
             if task is None:

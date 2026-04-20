@@ -437,7 +437,7 @@ class Task(with_metaclass(TaskType, object)):
         """
         return attribute_value
 
-    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False, export_json=True):
+    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False):
         """
         Generates a `wolfkrow_run_task` command line command to run in order to
         re-construct and run this task via command line.
@@ -478,37 +478,24 @@ class Task(with_metaclass(TaskType, object)):
         start_frame = None
         end_frame = None
 
-        if export_json:
-            # If the executable is Wolfkrow, then write all the args to a JSON
-            # file and pass the path in as a single arg
-            json_file_path = self._get_script_path(
-                extension="json", job_name=job_name, temp_dir=temp_dir
+        # Write all the args to a JSON file
+        json_file_path = self._get_script_path(
+            extension="json", job_name=job_name, temp_dir=temp_dir
+        )
+
+        try:
+            with open(json_file_path, "w") as json_file:
+                json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+
+        except Exception as exception:
+            raise TaskException(
+                "Couldn't write args JSON file to path: %s - %s"
+                % (json_file_path, exception)
             )
 
-            try:
-                with open(json_file_path, "w") as json_file:
-                    json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+        start_frame = task_args_dict.get("start_frame")
+        end_frame = task_args_dict.get("end_frame")
 
-            except Exception as exception:
-                raise TaskException(
-                    "Couldn't write args JSON file to path: %s - %s"
-                    % (json_file_path, exception)
-                )
-
-            start_frame = task_args_dict.get("start_frame")
-            end_frame = task_args_dict.get("end_frame")
-
-        else:
-            task_args = []
-            # For other executables, pass the args in as "--key value" pairs
-            for attribute_name, attribute_value in task_args_dict.items():
-                task_args.append(
-                    "--{attribute_name} {value}".format(
-                        attribute_name=attribute_name,
-                        value=attribute_value
-                    )
-                )
-        
         exported_task = TaskExport(
             self,
             executable=self.command_line_executable, 
@@ -697,11 +684,11 @@ sys.exit(ret)""".format(
         # Export the parent task.
         if export_type == "CommandLine":
             exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=False)
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
             )
         elif export_type == "Json":
             exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
             )
         elif export_type == "BashScript":
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
@@ -709,7 +696,7 @@ sys.exit(ret)""".format(
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "Json":
             exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
             )
         else:
             raise TaskException("Unknown export type: {}. Expected one of 'CommandLine', 'BashScript', or 'PythonScript'".format(

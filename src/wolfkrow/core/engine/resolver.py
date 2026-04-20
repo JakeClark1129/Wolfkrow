@@ -12,6 +12,15 @@ import string
 
 from string import Formatter
 
+sg_type_conversion_map = {
+    "number": int,
+    "float": float,
+    "entity": dict,
+}
+
+
+__schema_cache__ = {}
+
 class WolfkrowFormatter(Formatter):
     def _vformat(self, format_string, args, kwargs, used_args, recursion_depth, auto_arg_index=0):
         """
@@ -384,3 +393,131 @@ class Resolver(object):
                 value = value.replace(swap_path, default_os_path)
 
         return value
+
+    def process_sg_fields(self, fields):
+        """ Process SG fields to ensure they are in the correct format for the shotgun api.
+
+            Args:
+                fields (dict): The fields to process
+
+            Returns:
+                dict: The processed fields
+        """
+
+        processed_fields = {}
+
+        for field in fields:
+            field_value = self._process_sg_field(self.entity_type, field, fields[field])
+            processed_fields[field] = field_value
+
+        return processed_fields
+
+    def process_sg_filters(self, entity_type, filters):
+        """ Process SG filters to ensure they are in the correct format for the shotgun api.
+
+            Args:
+                filters (list): The filters to process
+
+            Returns:
+                list: The processed filters
+        """
+
+        processed_filters = copy.copy(filters)
+
+        self._process_sg_filters(entity_type, processed_filters)
+
+        return processed_filters
+
+    def _process_sg_filters(self, entity_type, filters):
+
+        # Check if were using complex filters, which have a different format. If so, we process those differently.
+        if isinstance(filters, dict):
+            nested_filters = filters.get("filters")
+            if not nested_filters:
+                raise ValueError("Filters must be a list, or complex filter dict. See SG filter-syntax documentation for more details.")
+            self._process_sg_filters(entity_type, nested_filters)
+            return
+
+        for filter in filters:
+            # Complex filters can be nested, into a list of filters
+            if isinstance(filter, dict):
+                self._process_sg_filters(entity_type, filter)
+            elif isinstance(filter, list):
+                if len(filter) != 3:
+                    raise ValueError("Filter lists must have exactly 3 elements. See SG filter-syntax documentation for more details.")
+                
+                key, operator, value = filter
+                # If the key is using field drilling, then we need to extract the entity type from the key.
+                # Ex: field_name.Type.sub_field_name
+                # We need to extract the drilled entity type to retireve the correct schema, and then the sub field name to determine the correct data type for the value.
+                if "." in key:
+                    type, field = key.split(".")[-2:]
+                else:
+                    type = entity_type
+                    field = key
+    
+                value = self._process_sg_field(type, field, value)
+                filter[2] = value
+
+    def _process_sg_field(self, entity_type, field, field_value):
+        """ Process a single SG field to ensure it is in the correct format for the shotgun api.
+
+            Args:
+                field (str): The name of the field to process
+
+        """
+
+        from wolfkrow.core.tasks.task import TaskAttribute
+
+        entity_schema = self._get_schema(entity_type)
+        sg_schema_type = entity_schema.get(field, {}).get("data_type", {}).get("value")
+        python_schema_type = sg_type_conversion_map.get(sg_schema_type)
+
+        # If our field is not the same type that the SG Scheme expects, then let's convert it.
+        if python_schema_type and not isinstance(field_value, python_schema_type):
+            field_value = TaskAttribute.convert_to_type(field_value, python_schema_type)
+
+        # For Entities we check for the ID field and convert it to an int.
+        if sg_schema_type == "entity" and isinstance(field_value, dict):
+            field_value = field_value.copy() # Copy the dict so we don't modify the original
+
+            id = field_value.get("id")
+            if id:
+                try:
+                    field_value["id"] = int(id)
+                except ValueError:
+                    print("Warning: Could not convert ID to int: {}".format(id))
+
+        elif sg_schema_type == "url" and isinstance(field_value, dict):
+            field_value = field_value.copy() # Copy the dict so we don't modify the original
+
+            # SG has a bug on Windows where backslashes MUST be used for the 
+            # drive letter, or it doubles up on the drive letter.
+            # Autodesk internal Ticket number to reference to follow up on this issue:
+            #   SG-4373
+            windows_path_regex = "[a-zA-Z]:/"
+            for key in field_value:
+                if key == "local_path" or key == "local_path_windows":
+                    if re.match(windows_path_regex, field_value[key]):
+                        print("Warning: Detected Windows Drive Letter path in field '{}'. ".format(field))
+                        print("    Converting slashes to backslashes.")
+                        print("    This is required due to a bug in Shotgun")
+                        field_value[key] = field_value[key].replace("/", "\\")
+
+        return field_value
+
+    def _get_schema(self, entity_type):
+        """ Gets the schema for a given entity type, and caches it for future use.
+
+            Args:
+                entity_type (str): The entity type to get the schema for.
+            Returns:
+                dict: The schema for the given entity type.
+        """
+        global __schema_cache__
+        if entity_type in __schema_cache__:
+            return __schema_cache__[entity_type]
+
+        schema = self.sgtk.shotgun.schema_field_read(entity_type)
+        __schema_cache__[entity_type] = schema
+        return schema

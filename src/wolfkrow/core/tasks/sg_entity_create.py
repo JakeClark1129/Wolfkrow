@@ -76,7 +76,7 @@ class ShotgunCreateEntity(ShotgunTask):
         """ Preforms the thumbnail upload
         """
 
-        fields = self.process_sg_fields(self.fields)
+        fields = self.resolver.process_sg_fields(self.fields)
 
         # First check if the entity already exists
         entity = self._sg.find_one(self.entity_type, [["code", "is", self.entity_code]])
