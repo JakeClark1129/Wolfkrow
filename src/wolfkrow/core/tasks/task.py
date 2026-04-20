@@ -268,7 +268,66 @@ class Task(with_metaclass(TaskType, object)):
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+
+    # ================== #
+    # Optional SG Fields #
+    # ================== #
     sgtk = TaskAttribute(default_value=None, configurable=False, serialize=False)
+    shotgun_site = TaskAttribute(
+        default_value=None, 
+        required=False,
+        configurable=False,
+        description="The url to your shotgun site."
+    )
+
+    http_proxy = TaskAttribute(
+        default_value=None, 
+        required=False,
+        configurable=False,
+        attribute_type=str,
+        description="HTTP proxy server to reroute SG traffic through."
+    )
+
+    authenticated_user = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="Serialized authenticated user to be deserialized on the farm. Deprecated, Please use user name, and auth token instead.")
+
+    user_name = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="User name of user to authenticate with"
+    )
+
+    auth_token = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="The Auth token to use for the user."
+    )
+
+    session_metadata = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="Metadata for the users session."
+    )
+
+    script_name = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="The name of the script as it is registered in shotgun."
+    )
+
+    api_key = TaskAttribute(
+        default_value=None,
+        required=False,
+        configurable=False,
+        description="The unique identifier of the API key for the script being run."
+    )
 
     def __init__(self, **kwargs):
         """ Initializes Task object
@@ -291,6 +350,13 @@ class Task(with_metaclass(TaskType, object)):
             if attribute is not None:
                 self.__setattr__(arg, kwargs[arg])
 
+        # NOTE: the _resolve_sg_connetion method will likely only work on a fully
+        #   resolved task. (Due to unresolved replacements like the users auth token)
+        #   Luckily, if the task has not been resolved yet, we will likely always
+        #   have a sgtk attribute we can rely on to get our SG connection.
+        #   We may have to re-think this in the future.
+        self._sg = self.sgtk.shotgun if self.sgtk else self._resolve_sg_connection()
+
         # Build the resolver for future use. Every task should get it's own, and
         # each tasks resolver is responsible for resolving any replacements used
         # within the task.
@@ -298,7 +364,8 @@ class Task(with_metaclass(TaskType, object)):
             self.replacements, 
             self.resolver_search_paths, 
             self.path_swap_lookup, 
-            sgtk=self.sgtk
+            sgtk=self.sgtk,
+            sg=self._sg
         )
 
         if self.python_script_executable is None:
@@ -437,7 +504,7 @@ class Task(with_metaclass(TaskType, object)):
         """
         return attribute_value
 
-    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False, export_json=True):
+    def export_to_command_line(self, job_name=None, temp_dir=None, deadline=False):
         """
         Generates a `wolfkrow_run_task` command line command to run in order to
         re-construct and run this task via command line.
@@ -478,37 +545,24 @@ class Task(with_metaclass(TaskType, object)):
         start_frame = None
         end_frame = None
 
-        if export_json:
-            # If the executable is Wolfkrow, then write all the args to a JSON
-            # file and pass the path in as a single arg
-            json_file_path = self._get_script_path(
-                extension="json", job_name=job_name, temp_dir=temp_dir
+        # Write all the args to a JSON file
+        json_file_path = self._get_script_path(
+            extension="json", job_name=job_name, temp_dir=temp_dir
+        )
+
+        try:
+            with open(json_file_path, "w") as json_file:
+                json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+
+        except Exception as exception:
+            raise TaskException(
+                "Couldn't write args JSON file to path: %s - %s"
+                % (json_file_path, exception)
             )
 
-            try:
-                with open(json_file_path, "w") as json_file:
-                    json.dump(task_args_dict, json_file, ensure_ascii=False, indent=4)
+        start_frame = task_args_dict.get("start_frame")
+        end_frame = task_args_dict.get("end_frame")
 
-            except Exception as exception:
-                raise TaskException(
-                    "Couldn't write args JSON file to path: %s - %s"
-                    % (json_file_path, exception)
-                )
-
-            start_frame = task_args_dict.get("start_frame")
-            end_frame = task_args_dict.get("end_frame")
-
-        else:
-            task_args = []
-            # For other executables, pass the args in as "--key value" pairs
-            for attribute_name, attribute_value in task_args_dict.items():
-                task_args.append(
-                    "--{attribute_name} {value}".format(
-                        attribute_name=attribute_name,
-                        value=attribute_value
-                    )
-                )
-        
         exported_task = TaskExport(
             self,
             executable=self.command_line_executable, 
@@ -697,11 +751,11 @@ sys.exit(ret)""".format(
         # Export the parent task.
         if export_type == "CommandLine":
             exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=False)
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
             )
         elif export_type == "Json":
             exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
             )
         elif export_type == "BashScript":
             exported_tasks.extend(self.export_to_bash_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
@@ -709,7 +763,7 @@ sys.exit(ret)""".format(
             exported_tasks.extend(self.export_to_python_script(job_name, temp_dir=self.temp_dir, deadline=deadline))
         elif export_type == "Json":
             exported_tasks.extend(
-                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline, export_json=True)
+                self.export_to_command_line(job_name, temp_dir=self.temp_dir, deadline=deadline)
             )
         else:
             raise TaskException("Unknown export type: {}. Expected one of 'CommandLine', 'BashScript', or 'PythonScript'".format(
@@ -782,6 +836,42 @@ sys.exit(ret)""".format(
 
         rep = self.__class__.__name__ + "(" + argStr + ")"
         return str(rep)
+
+
+    def _resolve_sg_connection(self):
+        """ Sets up shotgun connection to be used later.
+        """
+        sg = None
+        if self.user_name and self.auth_token:
+            import sgtk
+            authenticator = sgtk.authentication.ShotgunAuthenticator()
+
+            user = authenticator.create_session_user(
+                login=self.user_name,
+                session_token=self.auth_token,
+                host=self.shotgun_site,
+                http_proxy=self.http_proxy,
+                session_metadata=self.session_metadata
+            )
+            sg = user.create_sg_connection()
+
+        elif self.authenticated_user is not None:
+            # in some cases, the '\n' character will be interpreted as '\\n' (backslash, 
+            # and an n). Fix that here.
+            self.authenticated_user = self.authenticated_user.replace("\\n", "\n")
+
+            import sgtk
+            user = sgtk.authentication.deserialize_user(self.authenticated_user)
+            sg = user.create_sg_connection()
+        elif self.script_name and self.api_key:
+            import shotgun_api3
+            sg = shotgun_api3.Shotgun(
+                self.shotgun_site, 
+                script_name=self.script_name, 
+                api_key=self.api_key
+            )
+
+        return sg
 
     @classmethod
     def from_dict(

@@ -198,6 +198,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             command_line_executable_args=self.command_line_executable_args,
             python_script_executable=self.python_script_executable,
             python_script_executable_args=self.python_script_executable_args,
+            sgtk=self.sgtk
         )
 
         return [nuke_render_run]
