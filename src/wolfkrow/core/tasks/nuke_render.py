@@ -16,26 +16,6 @@ from .task_exceptions import TaskValidationException
 from wolfkrow.core.engine.resolver import Resolver
 
 class NukeTask(Task):
-    def export_to_command_line(self, job_name, temp_dir=None, deadline=False, export_json=False):
-        """ Will generate a `wolfkrow_run_task` command line command to run in 
-            order to re-construct and run this task via command line. 
-
-            Appends a '$' to the end of the command because nuke will try to accept
-            the last arguments as a frame number/range.
-        """
-        exported = super(NukeTask, self).export_to_command_line(
-            job_name,
-            temp_dir=temp_dir,
-            deadline=deadline,
-        )
-
-        # Append a "$" to the end of the command so that nuke does not consume 
-        # the last argument as a frame number/range.
-        for export in exported:
-            args = "{} $".format(export.task_args)
-            export.task_args = args
-        return exported
-
     def _command_line_sanitize_attribute(
         self, attribute_name, attribute_value, deadline=False
     ):
@@ -640,7 +620,7 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
         # settings on the write node when saving the script. This error only occurs 
         # when running nuke in terminal mode, and currently seems to only affect 
         # the codec profile knobs (More testing is required for specific knobs 
-        # effected).
+        # affected).
         # To get around this, we are going to open the nuke script after saving 
         # as a text file, then use some regex magic to find the Write node and 
         # confirm it's correct - If not, we will print a warning (To assist with 

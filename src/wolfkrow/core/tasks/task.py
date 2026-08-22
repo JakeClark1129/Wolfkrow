@@ -474,6 +474,9 @@ class Task(with_metaclass(TaskType, object)):
             task_args_dict[attribute_name] = sanitised_value
 
         task_args = []
+        json_file_path = None
+        start_frame = None
+        end_frame = None
 
         if export_json:
             # If the executable is Wolfkrow, then write all the args to a JSON
@@ -495,16 +498,8 @@ class Task(with_metaclass(TaskType, object)):
             start_frame = task_args_dict.get("start_frame")
             end_frame = task_args_dict.get("end_frame")
 
-            # Include the start + end frames, as we want Deadline to be able to
-            # replace them for chunked jobs
-            if start_frame not in (None, "None"):
-                task_args.append("--start_frame \"%s\"" % start_frame)
-            if end_frame not in (None, "None"):
-                task_args.append("--end_frame \"%s\"" % end_frame)
-
-            task_args.append("--json_args_file \"%s\"" % json_file_path)
-
         else:
+            task_args = []
             # For other executables, pass the args in as "--key value" pairs
             for attribute_name, attribute_value in task_args_dict.items():
                 task_args.append(
@@ -513,16 +508,15 @@ class Task(with_metaclass(TaskType, object)):
                         value=attribute_value
                     )
                 )
-
-        # Now put together the arg string
-        arg_str = "--task_name {task_name} ".format(task_name=self.__class__.__name__)
-        arg_str += " ".join(task_args)
         
         exported_task = TaskExport(
-            self, 
+            self,
             executable=self.command_line_executable, 
             executable_args=self.command_line_executable_args,
-            args=arg_str
+            json_args_file=json_file_path,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            args=task_args
         )
 
         return [exported_task]
