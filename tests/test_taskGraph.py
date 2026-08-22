@@ -3,7 +3,6 @@ import logging
 import traceback
 
 logging.basicConfig(level=logging.DEBUG)
-from wolfkrow.builder import workflow_builder
 from wolfkrow.core.tasks import task
 from wolfkrow.core.engine import task_graph
 from wolfkrow.core.tasks.file_copy import FileCopy
@@ -25,9 +24,9 @@ class TestTaskGraph(WolfkrowTestCase):
         logging.info("RUNNING TEST 'test_taskGraphExecuteSuccess'")
         logging.info("===========================================")
 
-        loader = self.get_default_test_loader()
+        scene = self.get_default_test_scene()
 
-        job = loader.parse_workflow("test_taskGraphExecuteSuccess")
+        job = scene.parse_workflow("test_taskGraphExecuteSuccess")
 
         job.execute_local()
 

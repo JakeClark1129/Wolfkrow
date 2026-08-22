@@ -6,6 +6,7 @@ class ConnectionTypes:
     START_FRAME = 1 << 2
     END_FRAME = 1 << 3
     NUKE_SCRIPT = 1 << 4
+    INT = 1 << 5
 
 class ConnectionDirection:
     INPUT = 1

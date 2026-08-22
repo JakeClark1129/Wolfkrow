@@ -5,8 +5,7 @@ import os
 import shutil
 import stat
 
-from wolfkrow.builder import workflow_builder
-
+from wolfkrow.config.scene import WolfkrowScene
 class WolfkrowTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -28,13 +27,11 @@ class WolfkrowTestCase(unittest.TestCase):
         if os.path.exists("./test_temp"):
             shutil.rmtree("./test_temp", onerror=on_rm_error)
 
-    def get_default_test_loader(self):
-        config_paths = [
-            self.get_test_config_file("test_config_file.yaml"), 
-            self.get_test_config_file("test_config_file2.yaml")
-        ]
-        loader = workflow_builder.Loader(config_file_paths=config_paths)
-        return loader
+    def get_default_test_scene(self):
+        test_scenes_dir = self._get_test_root("scenes")
+        scene_file = os.path.join(test_scenes_dir, "test_scene.yaml")
+        scene = WolfkrowScene(scene_file)
+        return scene
 
     def get_test_config_file(self, config_file_name):
         root = self._get_test_root("config")

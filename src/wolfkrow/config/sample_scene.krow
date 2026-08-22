@@ -37,3 +37,18 @@ wolfkrow:
   host: localhost
   user: wolfkrow
   password: Gpb3s4bm
+
+  wolfkrow_config_search_paths:
+    site:
+      path: D:/wolfkrow_v2/_wolfkrow/wolfkrow.yaml
+      children:
+        show: 
+          path: D:/wolfkrow_v2/shows/$SHOW/_wolfkrow/wolfkrow.yaml
+          children:
+            episode: 
+              path: D:/wolfkrow_v2/shows/$SHOW/_episodes/$EPISODE/_wolfkrow/wolfkrow.yaml
+            sequence: 
+              path: D:/wolfkrow_v2/shows/$SHOW/_shots/$SEQUENCE/_wolfkrow/wolfkrow.yaml
+              children:
+                shot: 
+                  path: D:/wolfkrow_v2/shows/$SHOW/_shots/$SEQUENCE/$SHOT/_wolfkrow/wolfkrow.yaml

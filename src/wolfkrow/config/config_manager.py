@@ -9,24 +9,112 @@ from ..core import tasks
 from ..core.engine.task_graph import TaskGraph
 from ..core.engine.resolver import Resolver
 
-class LoaderException(Exception):
-    """ Exception for generic Task errors
+class ConfigManagerException(Exception):
+    """ Exception for generic wolfkrow config manager errors
     """
     pass
 
-class Loader(object):
-    """ Responsible for loading the configuration files and 
-        creating a task graph from a given workflow_name inside 
-        present inside of the config file.
 
-        Note: Duplicate entries found in more than 1 config file are overwritten by config files found later in the list
+# TODO: Wolfkow was not originally designed to write tasks back out to the 
+# wolfkrow.yml file. It was originally intended to be manually edited. However, 
+# the addition of the Wolfkrow Editor means we want to be able to write tasks 
+# back out to the config file. To do this, we've created a separate Write class. 
+# At some point, we should merge both the loader and the writer into a single 
+# "ConfigManager" class which handles all reading, and writing of tasks and 
+# workflows from/to the config files. 
 
-        Args:
-            config_file_paths (list): List of file paths to parse for the configured 
-                work_flows. If not specified, it deafaults to the "WOLFKROW_CONFIG_SEARCH_PATHS" 
-                environment variable.
+
+class WolfkrowConfigNode():
+    def __init__(self):
+        self.children = {}
+        self.parent = None
+        self.context = None
+
+        self._config_dict = None
+
+
+# Were moving to an instanced wolfkrow design pattern so it heavily encourages 
+# many different wolfkrow config instances in a single studio, rather than encouraging
+# a large tiered configuration. 
+# In this new design, were aiming to have many different configurations. So think
+# a config for ingestion, and a config for publishing, and a config for client sends.
+# This will lend to more sensible graphs in the wolfkrow editor.
+
+class WolfkrowConfig():
+    
+    
+    def __init__(self, wolfkrow_config_file):
+        self._wolfkrow_config_file = wolfkrow_config_file
+
+        
+
+    def _update_config(self, current_dict, new_dict):
+        
+        # # Generic solution:
+        # for key, value in new_dict.items():
+        #     if key in current_dict:
+        #         if type(value) != type(current_dict[key]):
+        #             current_dict[key] = value
+        #         elif isinstance(dict, value):
+        #             self._update_config(current_dict[key], value)
+        #         elif isinstance(list, value) or isinstance(set, value):
+        #             for item in value:
+        #                 pass
+
+        # Custom solution:
+        # Top level of the config. IE: task_attribute_defaults, replacements, tasks
+        workflow_dict = new_dict.get("workflows")
+        if workflow_dict:
+            if "workflows" not in current_dict:
+                current_dict["workflows"] = workflow_dict
+            else:
+                current_dict["workflows"].update(workflow_dict)
+
+        tasks_dict = new_dict.get("tasks")
+        if tasks_dict:
+            if "tasks" not in current_dict:
+                current_dict["tasks"] = tasks_dict
+            else:
+                current_dict["tasks"].update(tasks_dict)
+
+        replacements_dict = new_dict.get("replacements")
+        if replacements_dict:
+            if "replacements" not in current_dict:
+                current_dict["replacements"] = replacements_dict
+            else:
+                current_dict["replacements"].update(replacements_dict)
+
+        resolver_search_paths = new_dict.get("resolver_search_paths")
+        if resolver_search_paths:
+            # resolver search paths completely override any previously specified search paths.
+            current_dict["resolver_search_paths"] = resolver_search_paths
+
+        task_attribute_defaults = new_dict.get("task_attribute_defaults")
+        if task_attribute_defaults:
+            if "task_attribute_defaults" not in current_dict:
+                current_dict["task_attribute_defaults"] = task_attribute_defaults
+            else:
+                current_dict["task_attribute_defaults"].update(task_attribute_defaults)
+
+        executables = new_dict.get("executables")
+        if executables:
+            if "executables" not in current_dict:
+                current_dict["executables"] = executables
+            else:
+                current_dict["executables"].update(executables)
+
+        path_swap = new_dict.get("path_swap")
+        if path_swap:
+            if "path_swap" not in current_dict:
+                current_dict["path_swap"] = path_swap
+            else:
+                current_dict["path_swap"].update(path_swap)
+
+
+class ConfigManager(object):
+    """ Responsible for writing tasks and workflows back out to the config files.
     """
-    def __init__(self, config_file_paths=None, replacements=None, sgtk=None, temp_dir=None):
+    def __init__(self, config_file_paths=None, sgtk=None, temp_dir=None):
         if config_file_paths is None:
             config_file_paths = os.environ.get('WOLFKROW_CONFIG_SEARCH_PATHS')
             config_file_paths = os.path.expandvars(config_file_paths)
@@ -34,10 +122,11 @@ class Loader(object):
                 config_file_paths = config_file_paths.split(",")
 
         if config_file_paths is None:
-            raise LoaderException("Configuration file not specified and 'WOLFKROW_CONFIG_SEARCH_PATHS' not set.")
+            raise ConfigManagerException("Configuration file not specified and 'WOLFKROW_CONFIG_SEARCH_PATHS' not set.")
 
-        self._config_file_paths = config_file_paths
-        self.__config = None
+        # self._config_file_paths = config_file_paths
+        self.__config = {}
+        self.__replacements = {}
         self._sgtk = sgtk
         self.temp_dir = temp_dir
 
@@ -48,12 +137,12 @@ class Loader(object):
         
         return self.__config
 
-    @property
-    def replacements(self):
-        if "replacements" in self.config:
-            return self.config["replacements"]
+    # @property
+    # def replacements(self):
+    #     if "replacements" in self.config:
+    #         return self.config["replacements"]
 
-        return None
+    #     return None
 
     def _update_config(self, current_dict, new_dict):
         
@@ -290,3 +379,5 @@ class RequiredReplacementData():
         self.default = default
         self.options = options
         self.strict = strict
+
+

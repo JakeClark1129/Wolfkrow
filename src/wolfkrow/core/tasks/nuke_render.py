@@ -78,7 +78,7 @@ class NukeRender(NukeTask):
 
     # Attributes for write node
     write_node_class = TaskAttribute(default_value="Write", configurable=True, attribute_type=str)
-    write_node_name = TaskAttribute(default_value=None, configurable=False, attribute_type=str, 
+    write_node_name = TaskAttribute(default_value=None, configurable=False, display_in_ui=False, attribute_type=str, 
         description="""
     Name of the write node to create/render from. If left unset, will automatically 
     determine its own name (recommended)
@@ -96,7 +96,8 @@ class NukeRender(NukeTask):
     bit_depth = TaskAttribute(default_value="16 bit half", configurable=True, attribute_type=str)
     codec = TaskAttribute(default_value=8, configurable=True, attribute_type=str, 
         description="""Which Codec to render the quicktime with.""")
-    compression = TaskAttribute(default_value=None, attribute_type=int, description="""Which Compression to use when writing the file. This value is only used when 
+    compression = TaskAttribute(default_value=None, configurable=True, attribute_type=int, description="""
+Which Compression to use when writing the file. This value is only used when 
 writing exr, sgi, targa, or tiff files. Each file type has its own options. See below:
     EXR:
         0 - none
@@ -195,20 +196,41 @@ writing exr, sgi, targa, or tiff files. Each file type has its own options. See 
             "for values to set on the root node."
     )
 
-    nuke_script = TaskIO(attribute_type=str, description="Path to the nuke script generated")
+    # nuke_script = TaskIO(attribute_type=str, description="Path to the nuke script generated")
 
-    # Define the inputs and outputs for a Task.
-    inputs = {
-        "file_sequence": Connection("file_sequence", ConnectionTypes.FILE_SEQUENCE | ConnectionTypes.FILE, direction="input"), 
-        "start_frame": Connection("start_frame", ConnectionTypes.START_FRAME, direction="input"), 
-        "end_frame": Connection("end_frame", ConnectionTypes.END_FRAME, direction="input")
-    }
-    outputs = {
-        "file_sequence": destination, 
-        "start_frame": render_start_frame, 
-        "end_frame": render_end_frame, 
-        "nuke_script": nuke_script
-    }
+    output_width = TaskAttribute(
+        default_value=None,
+        configurable=False,
+        display_in_ui=True,
+        attribute_type=int,
+        connection_flags=ConnectionTypes.INT, 
+        connection_direction=ConnectionDirection.OUTPUT,
+        description="Width of the output frames. This value is calculated by the "
+            "task at render time."
+    )
+    output_height = TaskAttribute(
+        default_value=None,
+        configurable=False,
+        display_in_ui=True,
+        attribute_type=int,
+        connection_flags=ConnectionTypes.INT, 
+        connection_direction=ConnectionDirection.OUTPUT,
+        description="Height of the output frames. This value is calculated by the "
+            "task at render time."
+    )
+
+    # # Define the inputs and outputs for a Task.
+    # inputs = {
+    #     "file_sequence": Connection("file_sequence", ConnectionTypes.FILE_SEQUENCE | ConnectionTypes.FILE, direction="input"), 
+    #     "start_frame": Connection("start_frame", ConnectionTypes.START_FRAME, direction="input"), 
+    #     "end_frame": Connection("end_frame", ConnectionTypes.END_FRAME, direction="input")
+    # }
+    # outputs = {
+    #     "file_sequence": destination, 
+    #     "start_frame": render_start_frame, 
+    #     "end_frame": render_end_frame, 
+    #     "nuke_script": nuke_script
+    # }
 
     def __init__(self, *args, **kwargs):
         super(NukeRender, self).__init__(*args, **kwargs)

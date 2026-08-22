@@ -36,6 +36,7 @@ class TaskAttribute(object):
     def __init__(self,
         default_value=None,
         configurable=False,
+        display_in_ui=True,
         attribute_options=None,
         attribute_type=None,
         connection_flags=0,
@@ -51,6 +52,7 @@ class TaskAttribute(object):
                 default_value (any): The default value of the attribute
                 configurable (bool): Whether or not this attribute should show up 
                     as a configurable attribute in the workflow designer.
+                display_in_ui (bool): Whether or not this attribute should be displayed in the UI.
                 attribute_options (list): List of accepted values for the attribute.
                 attribute_type (Type): Expected type of the value received.
                 required (bool): Whether or not this attribute is required for execution.
@@ -77,6 +79,7 @@ class TaskAttribute(object):
 
         self.default_value = default_value
         self.configurable = configurable
+        self.display_in_ui = display_in_ui
         self.attribute_options = attribute_options
         self.attribute_type = attribute_type
         self.connection_flags = connection_flags
@@ -251,6 +254,7 @@ class TaskIO(TaskAttribute):
         super(TaskIO, self).__init__(
             default_value=None, 
             configurable=False, 
+            display_in_ui=False, 
             attribute_options=None,
             attribute_type=attribute_type,
             required=False,
@@ -310,30 +314,69 @@ class Task(with_metaclass(TaskType, object)):
     """
 
     name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
-    name_prefix = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
-    id = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
-    dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
-    external_dependencies = TaskAttribute(default_value="", configurable=False, attribute_type=str, serialize=False,
-        description="""Comma separated list of dependency ID's that are not part of the task graph. These are the ID's of existing tasks which must be completed before this task can start. Currently only relevant for Deadline submission.""")
-    replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
-    resolver_search_paths = TaskAttribute(default_value=[], configurable=False, attribute_type=list)
-    path_swap_lookup = TaskAttribute(default_value={}, configurable=False, auto_resolve=False, attribute_type=dict)
+    name_prefix = TaskAttribute(
+        default_value=None, 
+        configurable=False, 
+        display_in_ui=False,
+        attribute_type=str
+    )
+    id = TaskAttribute(
+        default_value=None, 
+        configurable=False, 
+        display_in_ui=False, 
+        attribute_type=str
+    )
+    dependencies = TaskAttribute(
+        default_value=[], 
+        configurable=False, 
+        display_in_ui=False, 
+        attribute_type=list, 
+        serialize=False
+    )
+    external_dependencies = TaskAttribute(
+        default_value="", 
+        configurable=False, 
+        display_in_ui=False, 
+        attribute_type=str, 
+        serialize=False,
+        description="""Comma separated list of dependency ID's that are not part of the task graph. These are the ID's of existing tasks which must be completed before this task can start. Currently only relevant for Deadline submission."""
+    )
+    replacements = TaskAttribute(
+        default_value={}, 
+        configurable=False, 
+        display_in_ui=False, 
+        attribute_type=dict
+    )
+    resolver_search_paths = TaskAttribute(
+        default_value=[], 
+        configurable=False, 
+        display_in_ui=False, 
+        attribute_type=list
+    )
+    path_swap_lookup = TaskAttribute(
+        default_value={}, 
+        configurable=False, 
+        display_in_ui=False, 
+        auto_resolve=False, 
+        attribute_type=dict
+    )
     config_files = TaskAttribute(
         default_value=[],
-        configurable=False,
+        configurable=False, display_in_ui=False,
         attribute_type=list,
         description="""List of config files used to reconstruct the Loader object on the farm."""
     )
     settings_file = TaskAttribute(
         default_value=None,
         configurable=False,
+        display_in_ui=False,
         attribute_type=str,
         description="""Settings file used to reconstruct the Wolfkrow settings on the farm."""
     )
 
-    temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
+    temp_dir = TaskAttribute(default_value=None, configurable=False, display_in_ui=False, attribute_type=str)
 
-    chunkable = TaskAttribute(default_value=False, configurable=False, attribute_type=bool, serialize=False,
+    chunkable = TaskAttribute(default_value=False, configurable=False, display_in_ui=False, attribute_type=bool, serialize=False,
         description="whether or not this task is able to be run in Chunks. (Only relevant for Deadline submission.)"
     )
 
@@ -341,7 +384,7 @@ class Task(with_metaclass(TaskType, object)):
     python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
     command_line_executable =       TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
     command_line_executable_args =  TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    sgtk =                          TaskAttribute(default_value=None, configurable=False, serialize=False)
+    sgtk =                          TaskAttribute(default_value=None, configurable=False, display_in_ui=False, serialize=False)
 
     def __init__(self, **kwargs):
         """ Initializes Task object
@@ -865,4 +908,19 @@ class Task(with_metaclass(TaskType, object)):
 
         obj = cls(**filtered_data_dict)
         return obj
-        
+
+
+    def to_dict(
+        self, 
+    ):
+        """ 
+        """
+        data_dict = {}
+
+        for attribute_name, attribute_obj in list(self.task_attributes.items()):
+            if attribute_obj.serialize:
+                attribute_value = attribute_obj.__get__(self, dont_resolve=True)
+                if attribute_value is not attribute_obj.default_value:
+                    data_dict[attribute_name] = attribute_value
+
+        return data_dict

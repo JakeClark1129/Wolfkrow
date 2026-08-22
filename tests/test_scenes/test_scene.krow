@@ -1,0 +1,36 @@
+deadline:
+  host_name: deadline-manager
+  port: 8082
+  default_group: 8cores
+  default_pool: bundle
+  default_limits: 
+  default_limit_groups:
+
+  task_overrides:
+    NukeRender:
+      limit_groups: [nuke]
+
+  extra_job_attributes:
+    ExtraInfo0: "$SHOW"
+    ExtraInfo1: "$WORKSPACE"
+    ExtraInfo2: "$WORKSPACE_PATH"
+    UserName: "$USER"
+
+
+  environment_inclusion_filters:
+    - TK_* # Toolkit environment variables
+    - "*OCIO*" # Include everything relating to ocio
+    - WOLFKROW* # Wolfkrow environment variables
+  environment_exclusion_filters:
+  environment_inclusion_list:
+    - PYTHONPATH
+    - PATH
+  environment_exclusion_list:
+  
+wolfkrow:
+  wolfkrow_config_search_paths:
+    first:
+      path: $TEST_ROOT/test_config_file.yaml
+      children:
+        second: 
+          path: $TEST_ROOT/test_config_file2.yaml

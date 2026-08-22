@@ -9,9 +9,9 @@ from .wolfkrow_testcase import WolfkrowTestCase
 class TestReplacements(WolfkrowTestCase):
     def test_replacements(self):
 
-        loader = self.get_default_test_loader()
+        scene = self.get_default_test_scene()
 
-        task_graph = loader.parse_workflow("test_replacements")
+        task_graph = scene.parse_workflow("test_replacements")
         test_task = task_graph._tasks['test_replacements_task']
 
         self.assertEqual(test_task.source, "bar")

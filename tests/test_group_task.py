@@ -6,9 +6,8 @@ import unittest
 logging.basicConfig(level=logging.DEBUG)
 
 from wolfkrow.core.tasks.test_tasks import *
-from wolfkrow import Loader
-
 from .wolfkrow_testcase import WolfkrowTestCase
+from wolfkrow.config.config import WolfkrowConfig
 
 class TestGroupTask(WolfkrowTestCase):
 
@@ -17,10 +16,10 @@ class TestGroupTask(WolfkrowTestCase):
         """
 
         config_path = self.get_test_config_file("test_group_task.wolfkrow.yaml")
-        loader = Loader(
-            config_file_paths=[config_path]
+        config = WolfkrowConfig(
+            path=config_path
         )
-        task_graph = loader.parse_workflow("Group_Test")
+        task_graph = config.parse_workflow("Group_Test")
 
         exported_tasks = task_graph.export_tasks("CommandLine")
 
@@ -38,10 +37,10 @@ class TestGroupTask(WolfkrowTestCase):
         os.environ["WOLFKROW_DEFAULT_PYTHON_SCRIPT_EXECUTABLE"] = "python"
 
         config_path = self.get_test_config_file("test_group_task.wolfkrow.yaml")
-        loader = Loader(
-            config_file_paths=[config_path]
+        config = WolfkrowConfig(
+            path=config_path
         )
-        task_graph = loader.parse_workflow("Group_Test")
+        task_graph = config.parse_workflow("Group_Test")
 
         exported_tasks = task_graph.export_tasks("PythonScript")
 

@@ -5,19 +5,19 @@ from wolfkrow.builder import workflow_builder
 
 from .wolfkrow_testcase import WolfkrowTestCase
 
-class TestLoader(WolfkrowTestCase):
-    def test_loader(self):
-        loader = self.get_default_test_loader()
+class TestScene(WolfkrowTestCase):
+    def test_scene(self):
+        scene = self.get_default_test_scene()
 
-        config = loader.config
+        config = scene.config
 
         #TODO
         self.assertTrue(config)
 
     def test_default_task_attributes(self):
-        loader = self.get_default_test_loader()
+        scene = self.get_default_test_scene()
 
-        task_graph = loader.parse_workflow("test_nuke_render")
+        task_graph = scene.parse_workflow("test_nuke_render")
         self.assertTrue(task_graph._tasks['test_nuke_render'].command_line_executable_args == ["-t"])
         self.assertTrue(task_graph._tasks['test_nuke_render'].python_script_executable_args == ["-t"])
 
