@@ -92,7 +92,7 @@ class FileOperation(Task):
 
         import re
         source_filename = os.path.basename(self.source)
-        if re.search(self.sequence_identifier, source_filename):
+        if re.search(self.sequence_identifier, source_filename) or re.search(self.sequence_identifier, self.destination):
             return self.operate_on_sequence()
 
         self.operate(self.source, self.destination)
