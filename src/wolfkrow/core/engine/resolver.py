@@ -1,6 +1,7 @@
 from builtins import str
 from builtins import range
 from builtins import object
+from collections import deque
 from past.builtins import basestring
 
 import copy
@@ -13,6 +14,10 @@ import string
 from string import Formatter
 
 class WolfkrowFormatter(Formatter):
+    def __init__(self, resolve_optionals=False):
+        super().__init__()
+        self.resolve_optionals = resolve_optionals
+
     def _vformat(self, format_string, args, kwargs, used_args, recursion_depth, auto_arg_index=0):
         """
             Overwrite the _vformat method of the Formatter class to allow for optional
@@ -21,13 +26,59 @@ class WolfkrowFormatter(Formatter):
         """
         if recursion_depth < 0:
             raise ValueError('Max string recursion exceeded')
-        result = []
+        group_stack = deque()
+        current_group = []
+        valid_group = True
         for literal_text, field_name, format_spec, conversion in \
                 self.parse(format_string):
 
+            # Split the literal text on the ] character, and add the left to the current group, and the right to the result.
+            if literal_text and "]" in literal_text:
+
+                if not group_stack:
+                    raise ValueError(f'Unmatched \']\' in format string "{format_string}"')
+
+                values = literal_text.split("]")
+
+                for value in values[:-1]:
+                    current_group.append(value)
+                    previous_group = current_group
+                    previous_valid_group = valid_group
+
+                    # Pop the previous group from the stack, and add the current group to it.
+                    current_group, valid_group = group_stack.pop()
+
+                    # If the previous group was valid, then add it to the current group.
+                    if previous_valid_group:
+                        current_group.extend(previous_group)
+
+                    # we leave the last value after the last ] in the current 
+                    # group, and continue processing the rest of the format string.
+                    # This is because "]]_foo/[_" is a possible string.
+                    # And we should never have "]_foo/[_]" because there should 
+                    # always be a replacement within the optional brackets
+                    literal_text = values[-1]
+
+            # Split the literal text on the [ character, and add the left to the result, and the right to a new group.
+            if literal_text and "[" in literal_text:
+
+                values = literal_text.split("[")
+
+                for value in values[:-1]:
+                    # Add the current group, to the group stack.
+                    current_group.append(value)
+                    group_stack.append((current_group, valid_group))
+
+                    # Initialize the new group
+                    current_group = []
+                    valid_group = True
+
+                current_group.append(values[-1])
+
+
             # output the literal text
-            if literal_text:
-                result.append(literal_text)
+            elif literal_text:
+                current_group.append(literal_text)
 
             # if there's a field, output it
             if field_name is not None:
@@ -67,7 +118,13 @@ class WolfkrowFormatter(Formatter):
                         obj += conversion
 
                     obj += "}"
-                    result.append(obj)
+                    current_group.append(obj)
+                    # valid_group triggers the removal of fields within an optional 
+                    # group. If we don't want to resolve optional fields, then we 
+                    # can never set the valid_group to False, and so we will always
+                    # keep the optional fields in the string.
+                    if self.resolve_optionals:
+                        valid_group = False
                     continue
                 # WOLFKROW CUSTOMIZATION END
 
@@ -83,9 +140,13 @@ class WolfkrowFormatter(Formatter):
                     auto_arg_index=auto_arg_index)
 
                 # format the object and append to the result
-                result.append(self.format_field(obj, format_spec))
+                current_group.append(self.format_field(obj, format_spec))
 
-        return ''.join(result), auto_arg_index
+        # Ensure there is nothing left in the group stack, otherwise we have an unmatched [ character.
+        if group_stack:
+            raise ValueError(f'Unmatched \'[\' in format string "{format_string}"')
+
+        return ''.join(current_group), auto_arg_index
 
 class Resolver(object):
 
@@ -172,12 +233,13 @@ class Resolver(object):
             for replacement_b in replacements:
                 replacements[replacement_b] = self.resolve(
                     replacements[replacement_b], 
-                    replacements=single_replacement
+                    replacements=single_replacement,
+                    resolve_optionals=False,
                 )
 
         return replacements
 
-    def resolve(self, value, replacements=None):
+    def resolve(self, value, replacements=None, resolve_optionals=True):
         """
         Recurses into dicts + lists searching for {replacement_name} or
         @resolver tokens, replacing them with the corresponding value found in
@@ -202,7 +264,11 @@ class Resolver(object):
                 replaced_value[index] = self.resolve(list_value, replacements=replacements)
 
         elif isinstance(value, basestring):
-            replaced_value = self._replace_replacements(value, replacements=replacements)
+            replaced_value = self._replace_replacements(
+                value, 
+                replacements=replacements, 
+                resolve_optionals=resolve_optionals
+            )
             replaced_value = self._resolve_prefix(replaced_value, replacements=replacements)
             replaced_value = self._os_path_swap(replaced_value)
 
@@ -257,8 +323,25 @@ class Resolver(object):
 
         return path
 
-    def _replace_replacements(self, value, replacements=None):
+    def _replace_replacements(self, value, replacements=None, resolve_optionals=True):
+        """ Replaces {replacement_name} tokens with the corresponding value found
+        in the replacements dict.
 
+        NOTE: This method is used in a couple cases. One case is when resolving
+            replacements within other replacements. In this case, we won't have
+            all the replacements available yet, so we don't want to resolve optional
+            replacements, becuase that will remove them from the string, so they
+            arent still there later once we actually have all the replacements.
+
+        
+        Args:
+            value (str): The string containing replacement tokens.
+
+        Kwargs:
+            replacements (dict, optional): A dictionary of replacement values. 
+                If not provided, defaults to this resolvers replacements.
+            resolve_optionals (bool, optional): Whether to resolve optional replacements. Defaults to True.
+        """
         # First, expand environment variables.
         # Doing this first allows us to set environment variables inside of a replacement
         # name which will allow for some neat use cases. Such as setting the name of the
@@ -291,7 +374,7 @@ class Resolver(object):
         # Note: Replacing these replacements first, allows you to use a replacement 
         # in the name of a SGTK template.
         try:
-            value = WolfkrowFormatter().vformat(value, (), replacements)
+            value = WolfkrowFormatter(resolve_optionals=resolve_optionals).vformat(value, (), replacements)
         except:
             print("Replacements: {}".format(replacements))
             print("Error: Could not replace replacements in value: {}".format(value))
