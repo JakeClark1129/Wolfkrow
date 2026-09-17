@@ -235,11 +235,17 @@ class TaskGraph(object):
                 continue
 
             args = task_export.as_list()
+            # Some arguments are getting quotes around them. Remove them here.
+            for i in range(len(args)):
+                args[i] = args[i].strip('"')
 
-            #TODO: The python script being executed here can be a security liability 
-            # since they can be modified between being written out, and being executed 
-            # here. Either add a mechanism for ensuring they have not been modified 
-            # or prevent them from being modified.
+            print("\n")
+            print("=" * 80)
+            print("Executing Task: %s" % task_export.task.full_name)
+            print("Command: %s" % " ".join(args))
+            print("=" * 80)
+            print("")
+
             process = subprocess.Popen(
                 args,
                 shell=False,
@@ -254,6 +260,14 @@ class TaskGraph(object):
                 results[task_export.task.full_name] = False
 
         #TODO: Cleanup the tempdir from exported_tasks.
+        print("=" * 80)
+        print("Results: ")
+        for task_name, result in list(results.items()):
+            result_str = "Success" if result else "Failed"
+            print("    {:<50} - {}".format(task_name, result_str))
+        print("=" * 80)
+
+        return results
 
     def _get_additional_job_attrs(self, replacements=None, sgtk=None, task_type=None):
         """ Reads the settings file to get the default Group, Limits, and Pool 
@@ -347,7 +361,7 @@ class TaskGraph(object):
             job_attrs = {
                 "Name": task_export.task.full_name,
                 "BatchName": batch_name,
-                "Plugin": "CommandLine",
+                "Plugin": "WolfkrowTask",
                 "JobDependencies": dependencies_str,
             }
 
@@ -425,8 +439,13 @@ class TaskGraph(object):
                 var_index += 1
 
             plugin_attrs = {
-                "Executable": task.executable,
-                "Arguments": task.args,
+                "TaskName": task.task.__class__.__name__,
+                "Executable": task_export.executable,
+                "ExecutableArgs": " ".join(task_export.executable_args),
+                "JsonArgsFile": task.json_args_file,
+                "StartFrame": task_export.start_frame,
+                "EndFrame": task_export.end_frame,
+                "AdditionalArgs": " ".join(task_export.additional_args),
             }
 
             job = deadline.Jobs.SubmitJob(job_attrs, plugin_attrs)

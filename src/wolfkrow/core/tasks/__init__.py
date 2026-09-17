@@ -18,10 +18,10 @@ from . import *
 # Search direcotries found in the WOLFKROW_TASK_SEARCH_PATHS.
 # Note: Tasks defined more than once will overwrite and previous definitions found.
 
-PATH_SEP = ":"
+import os
+PATH_SEP = os.path.pathsep
 
 import imp
-import os
 search_paths = os.environ.get('WOLFKROW_TASK_SEARCH_PATHS')
 if search_paths:
     for item in search_paths.split(PATH_SEP):

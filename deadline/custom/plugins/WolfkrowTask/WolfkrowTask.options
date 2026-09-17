@@ -1,0 +1,35 @@
+
+[Executable]
+Type=string
+Label=Executable
+Description=Full path to the Python interpreter.
+Default=
+
+[ExecutableArgs]
+Type=string
+Label=Executable Args
+Description=Args
+
+[StartFrame]
+Type=int
+Label=Start frame
+Description=Frame to start processing from.
+
+[EndFrame]
+Type=int
+Label=End Frame
+Description=Frame to finish processing at.
+
+[TaskName]
+Type=string
+Label=Task Name
+Description=Name of the wolfkrow task to run.
+
+[JsonArgsFile]
+Type=string
+Label=JSON Args File
+Description=Path to the JSON arguments file for the task.
+
+[AdditionalArgs]
+Type=string
+Label=Additional args to pass ta the end of the command.

@@ -1,0 +1,4 @@
+[WolfkrowTask]
+Type=string
+Label=Wolfkrow Task Runner
+Description=Runs a wolfkrow task with a Python script.

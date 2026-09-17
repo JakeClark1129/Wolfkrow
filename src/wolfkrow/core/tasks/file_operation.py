@@ -88,7 +88,7 @@ class FileOperation(Task):
         """
 
         # Regex to check if the source and destination files are intended to be sequences or not.
-        self.sequence_identifier = "(%.[0-9]+d)"
+        self.sequence_identifier = "(%(.[0-9]+)?d)"
 
         import re
         source_filename = os.path.basename(self.source)

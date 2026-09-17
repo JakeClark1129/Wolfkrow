@@ -19,3 +19,17 @@ The following methods are the main methods:
 * parse_workflow: This is the primary method which parses a single workflow definition, and returns a TaskGraph containing all the Tasks configured in the workflow.
 * tasks_from_task_names_list: This is a secondary method which does a similar thing to the parse_workflow method, but it requires you to pass in the task names yourself rather than reading them from the configuration file.
 
+# Example Usage:
+
+```
+replacements = {
+    "show": "foo"
+    "sequence": "bar"
+    "shot": "bar_9999"
+}
+
+loader = Loader(
+    replacements=replacements,
+)
+task_graph = loader.parse_workflow("workflow_name")
+```
