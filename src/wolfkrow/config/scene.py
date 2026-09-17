@@ -40,7 +40,7 @@ class WolfkrowScene():
 
     @property
     def wolfkrow_search_paths(self):
-        return self._settings.get("wolfkrow", {}).get("wolfkrow_config_search_paths", {})
+        return self._settings.get("wolfkrow", {}).get("wolfkrow_config_search_paths", [])
 
     def default_context_from_env(self):
         """ This method generates a default context dictionary for this scene by

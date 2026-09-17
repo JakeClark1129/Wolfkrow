@@ -209,7 +209,7 @@ class WolfkrowConfig():
 
         task_graph = TaskGraph(
             workflow_name, 
-            replacements=self.replacements, 
+            replacements=self.additional_replacements, 
             temp_dir=self.temp_dir,
         )
         workflow_tasks = self.config['workflows'].get(workflow_name)
