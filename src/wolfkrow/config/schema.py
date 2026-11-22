@@ -3,9 +3,10 @@
 A schema is defined by a `wolfkrow_schema.yml` file in the root of a layered
 config directory:
 
+    base_color: "#D9D4F7"        # Optional colors used by the Wolfkrow Editor.
     groups:
       - name: Show
-        layers: [SHOW, SEQUENCE, SHOT]
+        layers: [SHOW, SEQUENCE, {key: SHOT, label: Shot, color: "#F5A9A9"}]
       - name: App
         layers: [APP, STEP]
       - name: Override
@@ -75,9 +76,18 @@ def validate_value(value):
 
 
 class Layer(object):
-    def __init__(self, key, label=None):
+    """ A single layer of a group. 
+
+    Args:
+        key (str): The context key. Also used as the environment variable name 
+            when reading a context from the environment.
+        label (str): Display name. Defaults to a title cased version of the key.
+        color (str): Optional color used by the Wolfkrow Editor. (Ex: "#F5C49C")
+    """
+    def __init__(self, key, label=None, color=None):
         self.key = key
         self.label = label or key.replace("_", " ").title()
+        self.color = color
 
     def __repr__(self):
         return "Layer({})".format(self.key)
@@ -103,8 +113,9 @@ class Group(object):
 class Schema(object):
     """ Describes the groups (And their layers) of a layered config. """
 
-    def __init__(self, groups):
+    def __init__(self, groups, base_color=None):
         self.groups = list(groups)
+        self.base_color = base_color
 
         names = [group.name for group in self.groups]
         if len(set(names)) != len(names):
@@ -123,13 +134,13 @@ class Schema(object):
             layers = []
             for layer_data in group_data.get("layers", []):
                 if isinstance(layer_data, dict):
-                    layers.append(Layer(layer_data["key"], layer_data.get("label")))
+                    layers.append(Layer(layer_data["key"], layer_data.get("label"), layer_data.get("color")))
                 else:
                     layers.append(Layer(str(layer_data)))
             if not layers:
                 raise SchemaException("Group '{}' has no layers.".format(group_data.get("name")))
             groups.append(Group(group_data["name"], layers, color=group_data.get("color")))
-        return cls(groups)
+        return cls(groups, base_color=(data or {}).get("base_color"))
 
     @classmethod
     def from_file(cls, path):
@@ -141,14 +152,23 @@ class Schema(object):
         for group in self.groups:
             group_data = collections.OrderedDict()
             group_data["name"] = group.name
-            group_data["layers"] = [
-                layer.key if layer.label == Layer(layer.key).label else {"key": layer.key, "label": layer.label}
-                for layer in group.layers
-            ]
+            layers = []
+            for layer in group.layers:
+                if layer.label == Layer(layer.key).label and not layer.color:
+                    layers.append(layer.key)
+                    continue
+                layer_data = {"key": layer.key, "label": layer.label}
+                if layer.color:
+                    layer_data["color"] = layer.color
+                layers.append(layer_data)
+            group_data["layers"] = layers
             if group.color:
                 group_data["color"] = group.color
             groups.append(dict(group_data))
-        return {"groups": groups}
+        data = {"groups": groups}
+        if self.base_color:
+            data["base_color"] = self.base_color
+        return data
 
     def group(self, name):
         try:

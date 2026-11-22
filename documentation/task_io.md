@@ -15,11 +15,18 @@ class MyTask(Task):
 
 ## Types
 
-`types` is ordered from the most generic to the most specific. An output can be
-connected to an input when they share any type. The more specific the shared
-type is, the better the match. When the input's most specific type is shared,
-it is an exact match. "Connect all" only connects exact matches, and skips any
-input with more than one equally good output.
+`types` is ordered from the most generic to the most specific. The first type is
+usually a primitive (`int`, `str`).
+
+* An output can be connected to an input when they share a type other than the
+  primitive. (Every string isn't compatible with every other string.) An input
+  whose only type is the primitive (Ex: `["int"]`) accepts anything of that type.
+* The more specific the shared type is, the better the match. When the input's
+  most specific type is shared, it is an exact match.
+* While dragging a connection in the editor, compatible inputs are highlighted,
+  exact matches are emphasized, and everything else is dimmed.
+* "Connect all" only connects exact matches, and skips any input with more than
+  one equally good output.
 
 The `Types` class contains the types used by the built-in tasks. Custom tasks
 are free to invent their own types.

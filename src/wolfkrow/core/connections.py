@@ -92,10 +92,16 @@ def match_score(output_types, input_types):
         output_types (list[str]): The types of the output attribute.
         input_types (list[str]): The types of the input attribute.
 
+    Note: The first (most generic) type of an input is typically a primitive, 
+    such as "int" or "str". Sharing only that type is not enough to be 
+    compatible, otherwise every string output would be compatible with every 
+    string input. The exception is an input which only has that one type, 
+    which accepts anything of that type.
+
     Returns:
-        int: 0 if the attributes are incompatible. Otherwise 1..len(input_types)
-            where len(input_types) means the input's most specific type is
-            satisfied (An "exact" match).
+        int: 0 if the attributes are incompatible. Otherwise 2..len(input_types)
+            (or 1 for single type inputs) where len(input_types) means the 
+            input's most specific type is satisfied (An "exact" match).
     """
     if not output_types or not input_types:
         return 0
@@ -105,6 +111,9 @@ def match_score(output_types, input_types):
     for index, input_type in enumerate(input_types):
         if input_type in output_types:
             score = index + 1
+
+    if score == 1 and len(input_types) > 1:
+        return 0
     return score
 
 

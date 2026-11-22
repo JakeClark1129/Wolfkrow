@@ -32,6 +32,13 @@ class TestConnections(unittest.TestCase):
         self.assertFalse(connections.is_exact_match(Types.START_FRAME, Types.END_FRAME))
         # Incompatible.
         self.assertEqual(connections.match_score(Types.START_FRAME, Types.FILE), 0)
+        # Only sharing the primitive type is not enough...
+        self.assertEqual(connections.match_score(Types.START_FRAME, Types.SG_ID), 0)
+        # ... unless the input only has the primitive type.
+        self.assertEqual(connections.match_score(Types.START_FRAME, Types.INT), 1)
+        self.assertTrue(connections.is_exact_match(Types.START_FRAME, Types.INT))
+        # A nuke script is a path, so it can go into a file input. (But not exactly)
+        self.assertEqual(connections.match_score(Types.NUKE_SCRIPT, Types.FILE), 2)
         # A more specific output satisfies a more generic input.
         self.assertTrue(connections.is_exact_match(Types.IMAGE_SEQUENCE, Types.FILE))
 
