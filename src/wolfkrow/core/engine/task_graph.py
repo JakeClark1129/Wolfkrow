@@ -100,6 +100,12 @@ class TaskGraph(object):
         # "depended on task => dependent task". This results in the most 
         # depended on tasks being at the top of the tree when sorting topologically. 
         # which will result in the correct order of task execution
+        # Connected inputs (IO<task:attribute>) imply a dependency on the 
+        # upstream task.
+        for upstream_task_name, _ in task.get_connections().values():
+            if upstream_task_name != task.name and upstream_task_name not in task.dependencies:
+                task.add_dependency(upstream_task_name)
+
         edges = []
         for dependency in task.dependencies:
             edges.append((dependency, task.name))
@@ -159,9 +165,21 @@ class TaskGraph(object):
             temp_dir = tempfile.mkdtemp()
         logging.info("TEMPDIR: " + temp_dir)
 
-        # Create a copy of the tasks dictionary.
-        tasks = copy.copy(self._tasks)
-        for task in list(tasks.values()):
+        # Export the tasks in dependency order, so that upstream tasks are 
+        # exported (and validated) before the tasks connected to their outputs.
+        for task in self._tasks_in_dependency_order():
+
+            # Every task with outputs gets a unique outputs file in the temp dir
+            # that it writes its output values to at runtime.
+            if task.io_attributes["outputs"] and not task.outputs_file:
+                task.outputs_file = task._get_script_path(
+                    extension="outputs.json",
+                    job_name=self.name,
+                    temp_dir=temp_dir,
+                )
+
+            # Replace connection tokens with the upstream task's output values.
+            self._resolve_connections(task)
 
             # Export scripts for task.
             exported = task.export(
@@ -204,6 +222,76 @@ class TaskGraph(object):
                     exported_task.executable = executable
 
         return exported_tasks
+
+    def _tasks_in_dependency_order(self):
+        """ Returns the tasks currently in the graph, sorted so that every task 
+            comes after the tasks it depends on.
+        """
+        tasks = list(self._tasks.values())
+        order = {}
+        try:
+            for index, task_name in enumerate(networkx.topological_sort(self._graph)):
+                order[task_name] = index
+        except networkx.NetworkXUnfeasible:
+            raise TaskGraphValidationException("Task Graph contains circular dependencies.")
+
+        return sorted(tasks, key=lambda task: order.get(task.name, -1))
+
+    def _find_task(self, task_name, prefix=None):
+        """ Finds a task in the graph by name, preferring one with the same prefix. """
+        candidates = [task for task in self._tasks.values() if task.name == task_name]
+        for task in candidates:
+            if task.name_prefix == prefix:
+                return task
+        return candidates[0] if candidates else None
+
+    def _resolve_connections(self, task):
+        """ Replaces the IO<task:attribute> tokens on the task's inputs with the 
+            current values of the upstream task's outputs. Also records where 
+            each value came from so that the task can pick up the value the 
+            upstream task actually produced at runtime. (See Task.load_runtime_inputs)
+
+            Raises:
+                TaskGraphException: The upstream task or attribute could not be found.
+        """
+        connections = task.get_connections()
+        if not connections:
+            return
+
+        input_sources = dict(task.input_sources or {})
+        for input_name, (upstream_name, output_name) in connections.items():
+            upstream = self._find_task(upstream_name, prefix=task.name_prefix)
+            if upstream is None:
+                raise TaskGraphException(
+                    "Input '%s' on Task '%s' is connected to Task '%s', which is "
+                    "not part of the TaskGraph." % (input_name, task.full_name, upstream_name)
+                )
+
+            output_attribute = upstream.io_attributes["outputs"].get(output_name)
+            if output_attribute is None:
+                raise TaskGraphException(
+                    "Input '%s' on Task '%s' is connected to '%s', which is not "
+                    "an output of Task '%s'." % (input_name, task.full_name, output_name, upstream_name)
+                )
+
+            value = getattr(upstream, output_name)
+            input_attribute = task.task_attributes[input_name]
+            if value is None:
+                # Not known until runtime. Fall back to the default for now.
+                logging.info("Output '%s' of Task '%s' is not known at export time. "
+                    "Input '%s' of Task '%s' will receive it at runtime." % (
+                        output_name, upstream.full_name, input_name, task.full_name))
+                input_attribute.data[task] = None
+            else:
+                setattr(task, input_name, value)
+
+            input_sources[input_name] = {
+                "task": upstream.full_name,
+                "attribute": output_name,
+                "outputs_file": upstream.outputs_file,
+            }
+
+        task.input_sources = input_sources
 
     def execute_local(
         self, 

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 from wolfkrow.core.tasks.shotgun_task import ShotgunTask
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
@@ -15,7 +16,7 @@ class ShotgunUploadMedia(ShotgunTask):
         a shotgun entity.
     """
 
-    source = TaskAttribute(
+    source = TaskAttribute(io=IO.INPUT, types=Types.FILE, 
         default_value=None, 
         required=True, 
         configurable=True, 
@@ -47,7 +48,7 @@ class ShotgunUploadMedia(ShotgunTask):
         description="The number of times to retry the upload if it fails."
     )
 
-    shotgun_id = TaskAttribute(
+    shotgun_id = TaskAttribute(io=IO.INPUT, types=Types.SG_ID, 
         default_value=None,
         required=True,
         configurable=True,

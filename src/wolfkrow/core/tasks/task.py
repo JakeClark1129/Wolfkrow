@@ -19,6 +19,7 @@ from weakref import WeakKeyDictionary
 from wolfkrow.core.engine.resolver import Resolver
 from wolfkrow.core.engine.task_export import TaskExport
 from wolfkrow.core.tasks.task_exceptions import TaskException
+from wolfkrow.core.connections import IO, parse_io_token
 from future.utils import with_metaclass
 
 
@@ -29,7 +30,8 @@ class TaskAttribute(object):
     """
 
     def __init__(self, default_value=None, configurable=False, attribute_options=None, 
-        attribute_type=None, required=False, auto_resolve=True, serialize=True, description=None):
+        attribute_type=None, required=False, auto_resolve=True, serialize=True, description=None,
+        io=IO.NONE, types=None, display_in_ui=True, ui_widget=None):
         """ Initialize the TaskAttribute object.
         
             Kwargs:
@@ -43,6 +45,19 @@ class TaskAttribute(object):
                     the __repr__ output, and therefore included in the exported 
                     task. (See Task.export())
                 description (str): Description of this attribute. (Used in the tool tip in the workflow designer.)
+                io (int): Connection direction flags. See wolfkrow.core.connections.IO. 
+                    INPUT attributes can receive a connection from another Task's 
+                    OUTPUT attribute.
+                types (list[str]): Connection types, ordered from most generic 
+                    to most specific. Ex: ["int", "frame_number", "start_frame"]. 
+                    Used to determine which inputs an output can be connected to.
+                    Defaults to the name of the attribute_type.
+                display_in_ui (bool): Whether or not this attribute is displayed 
+                    on the node in the Wolfkrow Editor.
+                ui_widget (str): Hint for which widget the Wolfkrow Editor should 
+                    use to edit this attribute. One of: "line", "multiline", 
+                    "int", "float", "bool", "options", "list", "dict", "path".
+                    Defaults to a widget based on the attribute_type.
         """
 
         # Must be a WeakKeyDictionary to allow garbage collection to clean up our 
@@ -66,6 +81,67 @@ class TaskAttribute(object):
         self.description = description
         self.required = required
         self.auto_resolve = auto_resolve
+
+        self.io = io
+        if types is None and io and attribute_type is not None:
+            types = [attribute_type.__name__]
+        self.types = list(types or [])
+        self.display_in_ui = display_in_ui
+        self.ui_widget = ui_widget
+
+        # The name the attribute is assigned to on the Task class. Set by the 
+        # TaskType metaclass.
+        self.name = None
+
+    @property
+    def is_input(self):
+        return bool(self.io & IO.INPUT)
+
+    @property
+    def is_output(self):
+        return bool(self.io & IO.OUTPUT)
+
+    def describe(self):
+        """ Returns a JSON serializable description of this TaskAttribute. 
+        Used by external tools such as the Wolfkrow Editor.
+        """
+        default_value = self.default_value
+        try:
+            json.dumps(default_value)
+        except (TypeError, ValueError):
+            default_value = repr(default_value)
+
+        ui_widget = self.ui_widget
+        if ui_widget is None:
+            if self.attribute_options is not None:
+                ui_widget = "options"
+            elif self.attribute_type is bool:
+                ui_widget = "bool"
+            elif self.attribute_type is int:
+                ui_widget = "int"
+            elif self.attribute_type is float:
+                ui_widget = "float"
+            elif self.attribute_type is list:
+                ui_widget = "list"
+            elif self.attribute_type is dict:
+                ui_widget = "dict"
+            else:
+                ui_widget = "line"
+
+        return {
+            "name": self.name,
+            "default_value": default_value,
+            "attribute_type": self.attribute_type.__name__ if self.attribute_type else None,
+            "attribute_options": self.attribute_options,
+            "configurable": self.configurable,
+            "required": self.required,
+            "serialize": self.serialize,
+            "description": textwrap.dedent(self.description).strip() if self.description else None,
+            "io": IO.to_list(self.io),
+            "types": self.types,
+            "display_in_ui": self.display_in_ui,
+            "ui_widget": ui_widget,
+        }
 
     def __get__(self, instance, instance_type=None, dont_resolve=False):
         """ Getter function. Will return the stored value for the specified instance
@@ -95,6 +171,9 @@ class TaskAttribute(object):
                 and self.auto_resolve is True 
                 and dont_resolve is False 
                 and hasattr(instance, "resolver")
+                # Unresolved connections (IO<task:attribute>) are replaced by 
+                # the TaskGraph during export. Until then, leave them untouched.
+                and parse_io_token(data) is None
             ):
                 data = self.resolve(instance, data)
 
@@ -210,7 +289,20 @@ class TaskType(type):
         for cl in reversed(classObj.__mro__[:-1]):
             for name, attr in list(cl.__dict__.items()):
                 if isinstance(attr, TaskAttribute):
+                    attr.name = name
+                    # Re-insert so that overridden attributes are ordered 
+                    # based on where the child class defines them.
+                    classObj.task_attributes.pop(name, None)
                     classObj.task_attributes[name] = attr
+
+        classObj.io_attributes = {
+            "inputs": collections.OrderedDict(
+                (name, attr) for name, attr in classObj.task_attributes.items() if attr.is_input
+            ),
+            "outputs": collections.OrderedDict(
+                (name, attr) for name, attr in classObj.task_attributes.items() if attr.is_output
+            ),
+        }
 
         # Register all tasks to the wolfkrow.core.tasks module.
         from wolfkrow.core.tasks import all_tasks
@@ -243,44 +335,44 @@ class Task(with_metaclass(TaskType, object)):
             Run -- Called immediately after the Setup method is called.
     """
 
-    name = TaskAttribute(default_value=None, configurable=True, attribute_type=str)
-    name_prefix = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
-    dependencies = TaskAttribute(default_value=[], configurable=False, attribute_type=list, serialize=False)
-    external_dependencies = TaskAttribute(default_value="", configurable=False, attribute_type=str, serialize=False,
+    name = TaskAttribute(default_value=None, configurable=True, attribute_type=str, display_in_ui=False)
+    name_prefix = TaskAttribute(display_in_ui=False, default_value=None, configurable=False, attribute_type=str)
+    dependencies = TaskAttribute(display_in_ui=False, default_value=[], configurable=False, attribute_type=list, serialize=False)
+    external_dependencies = TaskAttribute(display_in_ui=False, default_value="", configurable=False, attribute_type=str, serialize=False,
         description="""Comma separated list of dependency ID's that are not part of the task graph. These are the ID's of existing tasks which must be completed before this task can start. Currently only relevant for Deadline submission.""")
-    replacements = TaskAttribute(default_value={}, configurable=False, attribute_type=dict)
-    resolver_search_paths = TaskAttribute(default_value=[], configurable=False, attribute_type=list)
-    path_swap_lookup = TaskAttribute(default_value={}, configurable=False, auto_resolve=False, attribute_type=dict)
-    config_files = TaskAttribute(
+    replacements = TaskAttribute(display_in_ui=False, default_value={}, configurable=False, attribute_type=dict)
+    resolver_search_paths = TaskAttribute(display_in_ui=False, default_value=[], configurable=False, attribute_type=list)
+    path_swap_lookup = TaskAttribute(display_in_ui=False, default_value={}, configurable=False, auto_resolve=False, attribute_type=dict)
+    config_files = TaskAttribute(display_in_ui=False, 
         default_value=[],
         configurable=False,
         attribute_type=list,
         description="""List of config files used to reconstruct the Loader object on the farm."""
     )
 
-    temp_dir = TaskAttribute(default_value=None, configurable=False, attribute_type=str)
+    temp_dir = TaskAttribute(display_in_ui=False, default_value=None, configurable=False, attribute_type=str)
 
-    chunkable = TaskAttribute(default_value=False, configurable=False, attribute_type=bool, serialize=False,
+    chunkable = TaskAttribute(display_in_ui=False, default_value=False, configurable=False, attribute_type=bool, serialize=False,
         description="whether or not this task is able to be run in Chunks. (Only relevant for Deadline submission.)"
     )
 
-    python_script_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    python_script_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
-    command_line_executable = TaskAttribute(default_value=None, configurable=True, attribute_type=str, serialize=False)
-    command_line_executable_args = TaskAttribute(default_value=None, configurable=True, attribute_type=list, serialize=False)
+    python_script_executable = TaskAttribute(display_in_ui=False, default_value=None, configurable=True, attribute_type=str, serialize=False)
+    python_script_executable_args = TaskAttribute(display_in_ui=False, default_value=None, configurable=True, attribute_type=list, serialize=False)
+    command_line_executable = TaskAttribute(display_in_ui=False, default_value=None, configurable=True, attribute_type=str, serialize=False)
+    command_line_executable_args = TaskAttribute(display_in_ui=False, default_value=None, configurable=True, attribute_type=list, serialize=False)
 
     # ================== #
     # Optional SG Fields #
     # ================== #
-    sgtk = TaskAttribute(default_value=None, configurable=False, serialize=False)
-    shotgun_site = TaskAttribute(
+    sgtk = TaskAttribute(display_in_ui=False, default_value=None, configurable=False, serialize=False)
+    shotgun_site = TaskAttribute(display_in_ui=False, 
         default_value=None, 
         required=False,
         configurable=False,
         description="The url to your shotgun site."
     )
 
-    http_proxy = TaskAttribute(
+    http_proxy = TaskAttribute(display_in_ui=False, 
         default_value=None, 
         required=False,
         configurable=False,
@@ -288,45 +380,100 @@ class Task(with_metaclass(TaskType, object)):
         description="HTTP proxy server to reroute SG traffic through."
     )
 
-    authenticated_user = TaskAttribute(
+    authenticated_user = TaskAttribute(display_in_ui=False, 
         default_value=None,
         required=False,
         configurable=False,
         description="Serialized authenticated user to be deserialized on the farm. Deprecated, Please use user name, and auth token instead.")
 
-    user_name = TaskAttribute(
+    user_name = TaskAttribute(display_in_ui=False, 
         default_value=None,
         required=False,
         configurable=False,
         description="User name of user to authenticate with"
     )
 
-    auth_token = TaskAttribute(
+    auth_token = TaskAttribute(display_in_ui=False, 
         default_value=None,
         required=False,
         configurable=False,
         description="The Auth token to use for the user."
     )
 
-    session_metadata = TaskAttribute(
+    session_metadata = TaskAttribute(display_in_ui=False, 
         default_value=None,
         required=False,
         configurable=False,
         description="Metadata for the users session."
     )
 
-    script_name = TaskAttribute(
+    script_name = TaskAttribute(display_in_ui=False, 
         default_value=None,
         required=False,
         configurable=False,
         description="The name of the script as it is registered in shotgun."
     )
 
-    api_key = TaskAttribute(
+    api_key = TaskAttribute(display_in_ui=False, 
         default_value=None,
         required=False,
         configurable=False,
         description="The unique identifier of the API key for the script being run."
+    )
+
+    # ======================================= #
+    # Node based editor / Task I/O attributes #
+    # ======================================= #
+    ui_position = TaskAttribute(
+        display_in_ui=False,
+        default_value=None,
+        configurable=False,
+        serialize=False,
+        auto_resolve=False,
+        attribute_type=list,
+        description="[x, y] position of this Task's node in the Wolfkrow Editor. "
+            "Has no effect on execution."
+    )
+
+    outputs_file = TaskAttribute(
+        display_in_ui=False,
+        default_value=None,
+        configurable=False,
+        attribute_type=str,
+        description="Path to the JSON file this task writes it's OUTPUT TaskAttribute "
+            "values to after it has run. Assigned automatically by the TaskGraph during export."
+    )
+
+    input_sources = TaskAttribute(
+        display_in_ui=False,
+        default_value={},
+        configurable=False,
+        auto_resolve=False,
+        attribute_type=dict,
+        description="Lookup of INPUT attribute name -> {'task', 'attribute', 'outputs_file'} "
+            "describing which upstream output each connected input was resolved from. "
+            "Assigned automatically by the TaskGraph during export. Used at runtime "
+            "to pick up output values which were only known after the upstream "
+            "task ran."
+    )
+
+    config_root = TaskAttribute(
+        display_in_ui=False,
+        default_value=None,
+        configurable=False,
+        attribute_type=str,
+        description="Root directory of the layered (context based) wolfkrow config "
+            "used to create this task. Used to re-construct the config on the farm."
+    )
+
+    config_context = TaskAttribute(
+        display_in_ui=False,
+        default_value=None,
+        configurable=False,
+        auto_resolve=False,
+        attribute_type=dict,
+        description="Context used to resolve the layered wolfkrow config used to "
+            "create this task. Used to re-construct the config on the farm."
     )
 
     def __init__(self, **kwargs):
@@ -421,13 +568,127 @@ class Task(with_metaclass(TaskType, object)):
                 TaskValidationException: Invalid task configuration.
         """
 
+        self.load_runtime_inputs()
+
         self.setup()
-        try: 
-            return self.run()
+        try:
+            result = self.run()
         except Exception as e:
             traceback.print_exc()
             logging.error("Run method for task '%s' Failed. Reason: %s" % (self.name, e))
             return 1
+
+        # Only publish our outputs if we succeeded. The result is used as the
+        # process exit code, so 0 (or None) means success.
+        if result in (0, None):
+            self.write_runtime_outputs()
+
+        return result
+
+    # ================ #
+    # Task I/O methods #
+    # ================ #
+    def get_connections(self):
+        """ Returns the connections for this task's INPUT attributes.
+
+            Returns:
+                dict: input attribute name -> (upstream task name, upstream attribute name)
+        """
+        connections = collections.OrderedDict()
+        for attribute_name, attribute in self.io_attributes["inputs"].items():
+            value = attribute.__get__(self, dont_resolve=True)
+            token = parse_io_token(value)
+            if token is not None:
+                connections[attribute_name] = token
+        return connections
+
+    def get_output_values(self):
+        """ Returns the current (resolved) values of all OUTPUT attributes. """
+        outputs = collections.OrderedDict()
+        for attribute_name, attribute in self.io_attributes["outputs"].items():
+            value = getattr(self, attribute_name)
+            # Outputs that are still unresolved connections have no value yet.
+            if parse_io_token(value) is not None:
+                continue
+            outputs[attribute_name] = value
+        return outputs
+
+    def write_runtime_outputs(self):
+        """ Writes the values of all OUTPUT attributes to this task's outputs_file.
+            Downstream tasks read this file at runtime so that they can pick up
+            values that were only known after this task ran.
+        """
+        if not self.outputs_file or not self.io_attributes["outputs"]:
+            return
+
+        outputs = self.get_output_values()
+        try:
+            directory = os.path.dirname(self.outputs_file)
+            if directory and not os.path.isdir(directory):
+                os.makedirs(directory)
+            with open(self.outputs_file, "w") as handle:
+                json.dump(outputs, handle, indent=4, default=str)
+        except (OSError, IOError, TypeError, ValueError) as exception:
+            logging.warning("Unable to write outputs for task '%s' to '%s': %s" % (
+                self.full_name, self.outputs_file, exception
+            ))
+
+    def load_runtime_inputs(self):
+        """ Reads the outputs files of all upstream tasks this task is connected
+            to. Values found there take precedence over the values resolved at
+            export time, as they are the values the upstream task actually used.
+        """
+        input_sources = Task.input_sources.__get__(self, dont_resolve=True) or {}
+        outputs_cache = {}
+
+        for input_name, source in input_sources.items():
+            outputs_file = source.get("outputs_file")
+            output_name = source.get("attribute")
+            if not outputs_file or not output_name:
+                continue
+
+            if outputs_file not in outputs_cache:
+                outputs_cache[outputs_file] = None
+                if os.path.isfile(outputs_file):
+                    try:
+                        with open(outputs_file, "r") as handle:
+                            outputs_cache[outputs_file] = json.load(handle)
+                    except (OSError, IOError, ValueError) as exception:
+                        logging.warning("Unable to read outputs file '%s': %s" % (outputs_file, exception))
+
+            outputs = outputs_cache[outputs_file]
+            if not outputs or output_name not in outputs:
+                continue
+
+            runtime_value = outputs[output_name]
+            export_value = getattr(self, input_name)
+            if runtime_value == export_value:
+                continue
+
+            logging.warning(
+                "Task '%s': input '%s' was resolved to %r at export time, but "
+                "upstream task '%s' reported %r for output '%s' at runtime. Using "
+                "the runtime value." % (
+                    self.full_name, input_name, export_value, source.get("task"),
+                    runtime_value, output_name,
+                )
+            )
+            setattr(self, input_name, runtime_value)
+
+    @classmethod
+    def describe(cls):
+        """ Returns a JSON serializable description of this Task type, including
+            all of its TaskAttributes. Used by external tools such as the
+            Wolfkrow Editor to build nodes without needing to import the Task.
+        """
+        return {
+            "task_type": cls.__name__,
+            "module": cls.__module__,
+            "description": textwrap.dedent(cls.__doc__).strip() if cls.__doc__ else None,
+            "attributes": [attr.describe() for attr in cls.task_attributes.values()],
+            "inputs": list(cls.io_attributes["inputs"].keys()),
+            "outputs": list(cls.io_attributes["outputs"].keys()),
+        }
 
     def validate(self):
         """ Method for Validating that this task Object was properly created. 

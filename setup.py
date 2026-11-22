@@ -15,6 +15,7 @@ setup(
     entry_points={
         'console_scripts': [
             'wolfkrow_run_task=wolfkrow.scripts.wolfkrow_run_task:main',
+            'wolfkrow_describe_tasks=wolfkrow.scripts.wolfkrow_describe_tasks:main',
         ],
     },
     package_dir={

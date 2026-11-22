@@ -1,4 +1,5 @@
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
 class SequenceTask(Task):
@@ -6,9 +7,12 @@ class SequenceTask(Task):
         frame range. 
         Export method will generate multiple tasks based on chunk_size. 0 for no chunking.
     """
-    start_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int, required=False, 
+
+    # Base class only. Not shown in the Wolfkrow Editor's task list.
+    abstract = True
+    start_frame = TaskAttribute(io=IO.INPUT, types=Types.START_FRAME, default_value=None, configurable=True, attribute_type=int, required=False, 
         description="frame to start the task from.")
-    end_frame = TaskAttribute(default_value=None, configurable=True, attribute_type=int, required=False, 
+    end_frame = TaskAttribute(io=IO.INPUT, types=Types.END_FRAME, default_value=None, configurable=True, attribute_type=int, required=False, 
         description="frame to end the task from.")
     chunk_size = TaskAttribute(default_value=8, configurable=True, attribute_type=int, 
         description="Number of frames to split each task into for running on multiple machines. 0 to perform no chunking")

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 from wolfkrow.core.tasks.shotgun_task import ShotgunTask
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
@@ -15,7 +16,7 @@ class ShotgunUploadThumbnail(ShotgunTask):
         a shotgun entity.
     """
 
-    source = TaskAttribute(
+    source = TaskAttribute(io=IO.INPUT, types=Types.FILE, 
         default_value=None, 
         required=True, 
         configurable=True, 
@@ -31,7 +32,7 @@ class ShotgunUploadThumbnail(ShotgunTask):
         description="Type of entity to upload the thumbnail to. Required by the upload_thumbnail method in shotgun."
     )
 
-    shotgun_id = TaskAttribute(
+    shotgun_id = TaskAttribute(io=IO.INPUT, types=Types.SG_ID, 
         default_value=None,
         required=True,
         configurable=True,
@@ -55,7 +56,7 @@ class ShotgunUploadThumbnail(ShotgunTask):
         """
 
         for attr_name, attr in list(self.task_attributes.items()):
-            if attr.required is True and getattr(self, attr_name) is None:
+            if attr.required is True and getattr(self, attr_name) is None and attr_name not in (self.input_sources or {}):
                 
                 raise TaskValidationException("Required argument {arg} not supplied.".format(
                     arg=attr_name

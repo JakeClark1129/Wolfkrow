@@ -12,6 +12,9 @@ class ShotgunTask(Task):
         creation of a shotgun connection, and authentication.
     """
 
+    # Base class only. Not shown in the Wolfkrow Editor's task list.
+    abstract = True
+
     def __init__(self, **kwargs):
         """ Initialize the ShotgunTask Object
 
@@ -27,7 +30,7 @@ class ShotgunTask(Task):
         """
 
         for attr_name, attr in list(self.task_attributes.items()):
-            if attr.required is True and getattr(self, attr_name) is None:
+            if attr.required is True and getattr(self, attr_name) is None and attr_name not in (self.input_sources or {}):
                 
                 raise TaskValidationException("Required argument {arg} not supplied.".format(
                     arg=attr_name

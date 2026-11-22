@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 from wolfkrow.core.tasks.shotgun_task import ShotgunTask
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
@@ -50,6 +51,16 @@ class ShotgunCreateEntity(ShotgunTask):
         description="A dictionary of fields to update on the entity."
     )
 
+    entity_id = TaskAttribute(
+        io=IO.OUTPUT, types=Types.SG_ID,
+        default_value=None,
+        required=False,
+        configurable=False,
+        attribute_type=int,
+        description="The id of the created (or updated) entity. Only known after "
+            "this task has run, so connected inputs receive it at runtime."
+    )
+
     def __init__(self, **kwargs):
         """ Initialize the Rawline Object
 
@@ -66,7 +77,7 @@ class ShotgunCreateEntity(ShotgunTask):
 
         # TODO: Why is this here and not in the parent Task definition?
         for attr_name, attr in list(self.task_attributes.items()):
-            if attr.required is True and getattr(self, attr_name) is None:
+            if attr.required is True and getattr(self, attr_name) is None and attr_name not in (self.input_sources or {}):
                 
                 raise TaskValidationException("Required argument {arg} not supplied.".format(
                     arg=attr_name
@@ -85,6 +96,7 @@ class ShotgunCreateEntity(ShotgunTask):
             if self.overwrite:
                 entity = self._sg.update(self.entity_type, entity["id"], fields)
                 print("Updated exiting entity: {}".format(entity))
+                self.entity_id = entity["id"]
                 return 0
             else:
                 print("Entity already exists and overwrite is False. Exiting.")
@@ -92,6 +104,7 @@ class ShotgunCreateEntity(ShotgunTask):
         else:
             entity = self._sg.create(self.entity_type, fields)
             print("Created entity: {}".format(entity))
+            self.entity_id = entity["id"]
 
 
         return 0

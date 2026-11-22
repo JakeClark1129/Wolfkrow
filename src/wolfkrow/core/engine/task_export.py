@@ -58,6 +58,11 @@ class TaskExport(object):
         if self.executable_args:
             command_bits += self.executable_args
 
+        # The task type is required by wolfkrow_run_task to re-construct the Task.
+        # (The Deadline submission passes this separately via the plugin info)
+        if self.json_args_file and self.task is not None:
+            command_bits += ["--task_name", self.task.__class__.__name__]
+
         # Next, we add any frame range information.
         # NOTE: It is important that the start and end frame args are not the last
         #   args. This is because sometimes the executable will be Nuke, and Nuke

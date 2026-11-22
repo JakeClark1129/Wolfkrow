@@ -1,0 +1,20 @@
+tasks:
+   output_task:
+      task_type: TestTask_Outputs
+      destination: "{temp}/render.%04d.exr"
+      start_frame: 1001
+      end_frame: 1010
+      runtime_value_result: 42
+
+   input_task:
+      task_type: TestTask_Inputs
+      source: IO<output_task:destination>
+      start_frame: IO<output_task:start_frame>
+      end_frame: IO<output_task:end_frame>
+      runtime_value: IO<output_task:runtime_value>
+      report_file: "{temp}/report.json"
+
+workflows:
+   task_io:
+      - input_task
+      - output_task

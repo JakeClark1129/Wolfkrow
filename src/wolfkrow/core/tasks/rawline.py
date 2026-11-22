@@ -10,6 +10,7 @@ import shutil
 import subprocess
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 from wolfkrow.core.tasks.sequence_task import SequenceTask
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
@@ -23,7 +24,7 @@ class Rawline(SequenceTask):
     """ FileMove Task implementation
     """
 
-    destination = CommandLineArg(
+    destination = CommandLineArg(io=IO.OUTPUT, types=Types.DIRECTORY, 
         default_value=None, 
         command_line_arg="--output-path", 
         configurable=True, 
@@ -124,7 +125,7 @@ file name as the input images will be used, with the output format dependent fil
         description="Number of OpenEXR encoder threads. Default is 1. Range is 1 - 12."
     )
     
-    source = CommandLineArg(
+    source = CommandLineArg(io=IO.INPUT, types=Types.FILE, 
         default_value=None, 
         required=True,
         configurable=True, 
@@ -153,7 +154,7 @@ file name as the input images will be used, with the output format dependent fil
         """
 
         for attr_name, attr in list(self.task_attributes.items()):
-            if attr.required is True and getattr(self, attr_name) is None:
+            if attr.required is True and getattr(self, attr_name) is None and attr_name not in (self.input_sources or {}):
                 
                 raise TaskValidationException("Required argument {arg} not supplied.".format(
                     arg=attr_name

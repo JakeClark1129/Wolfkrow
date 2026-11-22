@@ -21,7 +21,19 @@ from . import *
 import os
 PATH_SEP = os.path.pathsep
 
-import imp
+import importlib.util
+import sys
+
+
+def _load_source(module_name, file_path):
+    """ Replacement for the deprecated `imp.load_source` (Removed in Python 3.12) """
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 search_paths = os.environ.get('WOLFKROW_TASK_SEARCH_PATHS')
 if search_paths:
     for item in search_paths.split(PATH_SEP):
@@ -34,4 +46,23 @@ if search_paths:
                         task_module=basename
                     )
                     file_path = os.path.join(item, file_name)
-                    imp.load_source(module_name, file_path)
+                    _load_source(module_name, file_path)
+
+
+def describe_all_tasks(include_abstract=False):
+    """ Returns a JSON serializable description of every registered Task type.
+
+    Used by external tools (Such as the Wolfkrow Editor) to build nodes for each
+    Task type without needing to know anything about the Task implementations.
+
+    Kwargs:
+        include_abstract (bool): Whether to include base Task types which are 
+            not intended to be used directly in a config. (Any Task type 
+            which sets `abstract = True` on its class)
+    """
+    descriptions = {}
+    for task_name, task_class in sorted(all_tasks.items()):
+        if not include_abstract and task_class.__dict__.get("abstract", False):
+            continue
+        descriptions[task_name] = task_class.describe()
+    return descriptions

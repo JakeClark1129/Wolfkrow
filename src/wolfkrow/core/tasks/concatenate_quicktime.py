@@ -9,6 +9,7 @@ import os
 import subprocess
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 
 class ConcatenateQuicktime(Task):
     """ ConcatenateQuicktime Task implementation
@@ -23,7 +24,7 @@ class ConcatenateQuicktime(Task):
             "must modify this attribute to point to the full ffmpeg path on your machine.")
     )
 
-    source = TaskAttribute(
+    source = TaskAttribute(io=IO.INPUT, types=Types.FILE, 
         default_value=None, 
         configurable=True, 
         attribute_type=str,
@@ -31,7 +32,7 @@ class ConcatenateQuicktime(Task):
         description="The Path to the mov's to concatenate. Use a wildcard to specify multiple files. (e.g. /path/to/movs/*.mov)"
     )
 
-    destination = TaskAttribute(
+    destination = TaskAttribute(io=IO.OUTPUT, types=Types.MOVIE, 
         default_value=None, 
         configurable=True, 
         attribute_type=str, 

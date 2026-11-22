@@ -8,6 +8,7 @@ import os
 import shutil
 
 from wolfkrow.core.tasks.task import Task, TaskAttribute
+from wolfkrow.core.connections import IO, Types
 from wolfkrow.core.tasks.task_exceptions import TaskValidationException
 
 class FileOperation(Task):
@@ -19,24 +20,45 @@ class FileOperation(Task):
             a trailing slash OR ensure the directory exists ahead of time.
     """
 
-    source = TaskAttribute(default_value="", attribute_type=str)
-    destination = TaskAttribute(default_value="", attribute_type=str)
+    # Base class only. Not shown in the Wolfkrow Editor's task list.
+    abstract = True
+
+    source = TaskAttribute(io=IO.INPUT, types=Types.FILE, default_value="", attribute_type=str)
+    destination = TaskAttribute(io=IO.OUTPUT, types=Types.FILE, default_value="", attribute_type=str)
 
     # Optional attributes used when when the source files are a sequence.
-    start_frame = TaskAttribute(
+    start_frame = TaskAttribute(io=IO.INPUT, types=Types.START_FRAME, 
         default_value=None,
         attribute_type=int, 
         description="Start frame of the source frames to operate on."
     )
-    end_frame = TaskAttribute(
+    end_frame = TaskAttribute(io=IO.INPUT, types=Types.END_FRAME, 
         default_value=None,
         attribute_type=int, 
         description="End frame of the source frames to operate on."
     )
-    renumbered_start_frame = TaskAttribute(
+    renumbered_start_frame = TaskAttribute(io=IO.INPUT, types=Types.START_FRAME, 
         default_value=None,
         attribute_type=int, 
         description="Start frame to renumber the destination sequence to."
+    )
+
+    # Outputs calculated from the frame range + renumbering. (See validate)
+    output_start_frame = TaskAttribute(
+        io=IO.OUTPUT, types=Types.START_FRAME,
+        default_value=None,
+        attribute_type=int,
+        configurable=False,
+        description="Start frame of the destination sequence. Calculated from "
+            "start_frame and renumbered_start_frame."
+    )
+    output_end_frame = TaskAttribute(
+        io=IO.OUTPUT, types=Types.END_FRAME,
+        default_value=None,
+        attribute_type=int,
+        configurable=False,
+        description="End frame of the destination sequence. Calculated from "
+            "start_frame, end_frame and renumbered_start_frame."
     )
 
     def __init__(self, **kwargs):
@@ -59,10 +81,27 @@ class FileOperation(Task):
         super(FileOperation, self).validate()
 
         if self.source == "" or self.source is None:
-            raise TaskValidationException("Task {name} has no source".format(self.name))
+            raise TaskValidationException("Task {name} has no source".format(name=self.name))
 
         if self.destination == "" or self.destination is None:
-            raise TaskValidationException("Task {name} has no destination".format(self.name))
+            raise TaskValidationException("Task {name} has no destination".format(name=self.name))
+
+        self._calculate_output_frame_range()
+
+    def _calculate_output_frame_range(self):
+        """ Calculates the output_start_frame and output_end_frame outputs. """
+        start_frame = self.start_frame
+        end_frame = self.end_frame
+        if start_frame is None:
+            return
+
+        output_start_frame = start_frame
+        if self.renumbered_start_frame is not None:
+            output_start_frame = self.renumbered_start_frame
+
+        self.output_start_frame = output_start_frame
+        if end_frame is not None:
+            self.output_end_frame = output_start_frame + (end_frame - start_frame)
 
     def setup(self):
         """ Will create destination directory if it does not already exist.
