@@ -143,7 +143,9 @@ class TaskGroup(Task):
 
         # Initialize the loader so that we can load our tasks from the configuration.
         loader = Loader(
-            config_file_paths=self.config_files,
+            config_file_paths=None if self.config_root else self.config_files,
+            config_root=self.config_root,
+            config_context=self.config_context,
             replacements=self.replacements,
             temp_dir=self.temp_dir,
             sgtk=self.sgtk,

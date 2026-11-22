@@ -27,17 +27,42 @@ class Loader(object):
                 work_flows. If not specified, it deafaults to the "WOLFKROW_CONFIG_SEARCH_PATHS" 
                 environment variable.
     """
-    def __init__(self, config_file_paths=None, replacements=None, sgtk=None, temp_dir=None):
-        if config_file_paths is None:
+    def __init__(self, config_file_paths=None, replacements=None, sgtk=None, temp_dir=None,
+        config_root=None, config_context=None):
+        """
+        Kwargs:
+            config_file_paths (list): Legacy flat list of wolfkrow.yml files. 
+                Later files override whole entries of earlier files.
+            config_root (str): Root directory of a layered (context based) 
+                config. (See wolfkrow.config). Defaults to the WOLFKROW_CONFIG_ROOT 
+                environment variable when no config_file_paths are given.
+            config_context (dict): Layer key -> value pairs selecting the context 
+                to resolve the layered config for. Defaults to the environment 
+                variables named after each layer key.
+        """
+        if config_file_paths is None and config_root is None:
+            config_root = os.environ.get("WOLFKROW_CONFIG_ROOT") or None
+
+        if config_file_paths is None and config_root is None:
             config_file_paths = os.environ.get('WOLFKROW_CONFIG_SEARCH_PATHS')
-            config_file_paths = os.path.expandvars(config_file_paths)
             if config_file_paths:
-                config_file_paths = config_file_paths.split(",")
+                config_file_paths = os.path.expandvars(config_file_paths).split(",")
 
-        if config_file_paths is None:
-            raise LoaderException("Configuration file not specified and 'WOLFKROW_CONFIG_SEARCH_PATHS' not set.")
+        if config_file_paths is None and config_root is None:
+            raise LoaderException("Configuration not specified and neither 'WOLFKROW_CONFIG_ROOT' "
+                "nor 'WOLFKROW_CONFIG_SEARCH_PATHS' are set.")
 
-        self._config_file_paths = config_file_paths
+        self._layered_config = None
+        self._context = None
+        if config_root is not None:
+            from wolfkrow.config import LayeredConfig
+            self._layered_config = LayeredConfig(config_root)
+            if config_context is None:
+                self._context = self._layered_config.schema.context_from_environment()
+            else:
+                self._context = self._layered_config.schema.context(config_context)
+
+        self._config_file_paths = config_file_paths or []
         self.__config = None
         self.replacements = replacements or {}
         self._sgtk = sgtk
@@ -119,13 +144,24 @@ class Loader(object):
             else:
                 current_dict["path_swap"].update(path_swap)
 
+    @property
+    def context(self):
+        """ The context the layered config was resolved for. (None for legacy configs) """
+        return self._context
+
     def _load_configs(self, config_file_paths):
         config = {}
+        sg = self._sgtk.shotgun if self._sgtk else None
+        resolver = Resolver(self.replacements, sgtk=self._sgtk, sg=sg)
+
+        if self._layered_config is not None:
+            resolution = self._layered_config.resolve(self._context)
+            config = resolution.config
+            self._config_file_paths = resolution.paths
+            config_file_paths = []
+
         # Replace any replacements in the config file paths.
         for config_file in config_file_paths:
-
-            sg = self._sgtk.shotgun if self._sgtk else None
-            resolver = Resolver(self.replacements, sgtk=self._sgtk, sg=sg)
             config_file = resolver.resolve(config_file)
 
             # Check that the config file exists before loading it.
@@ -185,6 +221,9 @@ class Loader(object):
 
         task_data['name'] = task_name
         task_data['config'] = self.config
+        if self._layered_config is not None:
+            task_data['config_root'] = self._layered_config.root
+            task_data['config_context'] = dict(self._context.values())
         task = task_obj.from_dict(
             task_data, 
             replacements=self.replacements,
